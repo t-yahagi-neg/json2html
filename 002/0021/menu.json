@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "type": "link",
+      "text": "ピン留め",
+      "url": "../../pins/index.html",
+      "relation": "parent"
+    },
+    {
+      "type": "link",
+      "text": "002 列表示・非表示時に解除",
+      "url": "../index.html",
+      "relation": "parent"
+    },
+    {
+      "type": "link",
+      "text": "0022 初期表示・ラベル・配置",
+      "url": "../0022/index.html",
+      "relation": "sibling"
+    }
+  ]
+}

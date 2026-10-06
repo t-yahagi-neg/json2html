@@ -1,0 +1,77 @@
+{
+  "$schema": "./schema/table.schema.json",
+  "title": "json2html 検証トップ",
+  "columns": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F"
+  ],
+  "rows": [
+    {
+      "A": "f",
+      "B": {
+        "type": "link",
+        "text": "g",
+        "url": "https://example.com/"
+      },
+      "C": {
+        "type": "color",
+        "color": "black"
+      },
+      "D": {
+        "type": "color",
+        "color": "black"
+      },
+      "E": {
+        "type": "color",
+        "color": "black"
+      },
+      "F": {
+        "type": "multiline",
+        "lines": [
+          "通常の説明",
+          {
+            "type": "link",
+            "text": "公式サイト",
+            "url": "https://example.com/"
+          },
+          "補足説明"
+        ]
+      }
+    },
+    {
+      "A": "k",
+      "B": "",
+      "C": "",
+      "D": "",
+      "E": {
+        "type": "color",
+        "color": "black"
+      },
+      "F": {
+        "type": "multiline",
+        "lines": [
+          "1行目",
+          {
+            "type": "link",
+            "text": "検索",
+            "url": "https://www.google.com/"
+          },
+          "",
+          "4行目"
+        ]
+      }
+    },
+    {
+      "A": "",
+      "B": "",
+      "C": "",
+      "D": "",
+      "E": "",
+      "F": ""
+    }
+  ]
+}

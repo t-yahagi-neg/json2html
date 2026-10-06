@@ -1,0 +1,720 @@
+/* json2html: index.html と iframe 内 menu.html の共通スタイル */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  color: #1a1a1a;
+  background: #f4f5f7;
+  font-family:
+    "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP",
+    system-ui,
+    sans-serif;
+}
+
+.page-layout {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 220px;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #e8eaef;
+  border-right: 1px solid #c5cad3;
+  transition: width 0.18s ease;
+}
+
+/* メニュー右上の縮小トグル */
+.sidebar-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 0.4rem 0.45rem;
+  border-bottom: 1px solid #c5cad3;
+  background: #e0e4eb;
+}
+
+.sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 2rem;
+  min-height: 1.85rem;
+  margin: 0;
+  padding: 0.25rem 0.45rem;
+  color: #1a1a1a;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #c5cad3;
+  border-radius: 4px;
+}
+
+.sidebar-toggle:hover {
+  color: #0b57d0;
+  border-color: #0b57d0;
+  background: #e8f0fe;
+}
+
+.sidebar-toggle-icon {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.sidebar-toggle-label {
+  font-size: 0.75rem;
+}
+
+.menu-frame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  background: transparent;
+  border: 0;
+}
+
+/* 縮小表示: 幅を狭め、iframe は隠してトグルだけ見せる */
+.sidebar.is-collapsed {
+  width: 2.75rem;
+}
+
+.sidebar.is-collapsed .sidebar-toolbar {
+  justify-content: center;
+  padding: 0.4rem 0.25rem;
+}
+
+.sidebar.is-collapsed .sidebar-toggle-label {
+  /* 狭い幅ではアイコンのみ */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sidebar.is-collapsed .menu-frame {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.menu-page {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #e8eaef;
+}
+
+.menu {
+  padding: 1rem;
+}
+
+.menu > h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-item {
+  width: calc(100% - 16px);
+  max-width: 100%;
+  min-width: 0;
+  align-self: flex-start;
+}
+
+/* 同幅の行を親・同階層・子の順に 0 / 8 / 16px ずらす。 */
+.menu-relation-parent { align-self: flex-start; }
+.menu-relation-sibling { align-self: center; }
+.menu-relation-child { align-self: flex-end; }
+
+.menu-item a,
+.menu-item span {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 4px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.menu-item a {
+  color: #0b57d0;
+  background: #fff;
+  text-decoration: none;
+}
+
+.menu-item a:hover {
+  color: #fff;
+  background: #0b57d0;
+}
+
+.menu-item-text span {
+  color: #4d535c;
+  background: #d9dde5;
+  cursor: default;
+}
+
+.menu-empty {
+  margin: 0;
+  padding: 0.75rem;
+  color: #4d535c;
+  background: #d9dde5;
+  border-radius: 4px;
+}
+
+.main-content {
+  display: flex;
+  /* 幅: 残り幅に抑える / 高さ: ビューポート内に収め表の縦スクロールを可能にする */
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100vh;
+  padding: 1rem 1.25rem 1rem;
+  overflow: hidden;
+}
+
+.page-header {
+  flex-shrink: 0;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #c5cad3;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.table-section {
+  /* 残りの高さを使い、内側 .table-scroll に横・縦スクロールを委ねる */
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  padding: 0.75rem;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #c5cad3;
+}
+
+.table-filter-bar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.table-filter-status {
+  color: #4d535c;
+  font-size: 0.9rem;
+}
+
+.table-filter-clear,
+#table-columns-toggle {
+  padding: 0.35rem 0.75rem;
+  color: #1a1a1a;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  background: #eef1f6;
+  border: 1px solid #c5cad3;
+  border-radius: 4px;
+}
+
+.table-filter-clear:hover,
+#table-columns-toggle:hover,
+#table-columns-toggle[aria-expanded="true"] {
+  background: #e0e5ee;
+}
+
+.table-filter-actions,
+.table-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.table-filter-bar > .table-filter-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ヘッダ: 列名 + 右端トグル（Excel 風） */
+.th-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.th-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.table-filter-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  padding: 0;
+  color: #4d535c;
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #c5cad3;
+  border-radius: 3px;
+}
+
+.table-filter-toggle:hover,
+.table-filter-toggle[aria-expanded="true"] {
+  color: #0b57d0;
+  border-color: #0b57d0;
+  background: #e8f0fe;
+}
+
+.table-filter-toggle.is-filtered {
+  color: #fff;
+  background: #0b57d0;
+  border-color: #0b57d0;
+}
+
+.table-filter-toggle-icon {
+  display: block;
+  transform: translateY(-0.05em);
+}
+
+/* フローティングのチェックリストパネル */
+.table-filter-panel,
+.table-columns-panel {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(320px, calc(100vw - 16px));
+  max-height: min(360px, calc(100vh - 16px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #1a1a1a;
+  font-size: 0.875rem;
+  background: #fff;
+  border: 1px solid #8b929e;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.table-filter-panel[hidden],
+.table-columns-panel[hidden],
+#data-table th[hidden],
+#data-table td[hidden] {
+  display: none !important;
+}
+
+.table-columns-panel input:disabled + .table-filter-option-label {
+  color: #626975;
+}
+
+.table-filter-bar button:focus-visible,
+.table-filter-toggle:focus-visible,
+.table-filter-panel :focus-visible,
+.table-columns-panel :focus-visible {
+  outline: 2px solid #0b57d0;
+  outline-offset: 2px;
+}
+
+.table-filter-panel-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  background: #eef1f6;
+  border-bottom: 1px solid #c5cad3;
+}
+
+.table-filter-panel-title {
+  font-weight: 600;
+}
+
+.table-filter-panel-close {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  color: #4d535c;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+}
+
+.table-filter-panel-close:hover {
+  background: #e0e5ee;
+}
+
+.table-filter-panel-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  border-bottom: 1px solid #e0e5ee;
+}
+
+.table-filter-panel-actions button {
+  padding: 0.2rem 0.45rem;
+  color: #0b57d0;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+}
+
+.table-filter-panel-actions button:hover {
+  text-decoration: underline;
+  background: #e8f0fe;
+}
+
+.table-filter-option-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0.35rem 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.table-filter-option {
+  margin: 0;
+  padding: 0;
+}
+
+.table-filter-option label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+}
+
+.table-filter-option label:hover {
+  background: #f0f4fa;
+}
+
+.table-filter-option input {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.table-filter-option-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.table-filter-option-empty {
+  padding: 0.5rem 0.65rem;
+  color: #4d535c;
+}
+
+.table-filter-swatch {
+  flex-shrink: 0;
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 1px solid #8b929e;
+  border-radius: 2px;
+}
+
+.table-filter-swatch-black {
+  background: #000;
+}
+
+.table-filter-swatch-none {
+  background: repeating-linear-gradient(
+    -45deg,
+    #fff,
+    #fff 2px,
+    #e0e5ee 2px,
+    #e0e5ee 4px
+  );
+}
+
+/* 表だけ横・縦スクロールする領域（メニュー・タイトルはここに含めない） */
+.table-scroll {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  /* 内容に応じて列幅を決める（固定幅レイアウトは使わない） */
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+  /* sticky の 1 行目・1 列目固定と相性を取る */
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+th,
+td {
+  /* 文字列の長さに合わせて列を伸ばす。ただしおおよそ20文字で折り返す */
+  width: auto;
+  max-width: 20em;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: center;
+  vertical-align: middle;
+  /* separate + spacing 0 で隣接線を共有（右・下を主に描画） */
+  border-right: 1px solid #8b929e;
+  border-bottom: 1px solid #8b929e;
+  background: #fff;
+}
+
+thead th {
+  border-top: 1px solid #8b929e;
+}
+
+th:first-child,
+td:first-child {
+  border-left: 1px solid #8b929e;
+}
+
+th {
+  font-weight: 600;
+  background: #eef1f6;
+}
+
+/*
+ * 1行目（ヘッダ）・1列目を .table-scroll 内スクロール時に固定
+ * 角セル（1行目×1列目）は z-index を最上位にする
+ */
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #eef1f6;
+}
+
+tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+}
+
+thead th:first-child {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  background: #eef1f6;
+}
+
+td a {
+  color: #0b57d0;
+  text-decoration: underline;
+}
+
+td a:hover {
+  color: #0842a0;
+}
+
+td.cell-black {
+  height: 2.5rem;
+  color: transparent;
+  background: #000;
+}
+
+/* 1列目が黒塗りのときもスクロール透過を防ぐ */
+tbody td.cell-black:first-child {
+  background: #000;
+}
+
+.multiline-cell {
+  overflow-wrap: anywhere;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.6;
+}
+
+/* Optional alignment classes; inline alignment on th-label/td takes precedence. */
+.th-label.align-left,
+td.align-left {
+  text-align: left;
+}
+
+.th-label.align-center,
+td.align-center {
+  text-align: center;
+}
+
+.th-label.align-right,
+td.align-right {
+  text-align: right;
+}
+
+.multiline-line,
+.multiline-empty-line {
+  min-height: 1.6em;
+}
+
+.multiline-link-line a {
+  display: block;
+  width: 100%;
+}
+
+.data-messages,
+.menu-messages {
+  flex-shrink: 0;
+  margin-top: 1rem;
+  max-height: 25vh;
+  padding: 0.85rem 1rem;
+  overflow: auto;
+  background: #fff8e6;
+  border: 1px solid #d4a017;
+  border-radius: 4px;
+}
+
+.data-messages h2,
+.menu-messages h2 {
+  margin: 0 0 0.5rem;
+  color: #6b4e00;
+  font-size: 1rem;
+}
+
+.data-messages ul,
+.menu-messages ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.data-messages li,
+.menu-messages li {
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+  color: #3d3200;
+}
+
+@media (max-width: 768px) {
+  .page-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex-shrink: 0;
+    border-right: 0;
+    border-bottom: 1px solid #c5cad3;
+  }
+
+  .sidebar.is-collapsed {
+    width: 100%;
+    height: auto;
+  }
+
+  .sidebar.is-collapsed .menu-frame {
+    display: none;
+    height: 0;
+  }
+
+  .menu-frame {
+    width: 100%;
+    height: 220px;
+  }
+
+  .main-content {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 50vh;
+    padding: 0.75rem;
+  }
+
+  .table-section {
+    min-height: 40vh;
+    padding: 0.5rem;
+  }
+}
+
+/* Persistent page pins (base buttons and links reuse the existing styles). */
+#page-pin-toggle { margin-top: 0; }
+#page-pin-toggle[aria-pressed="true"],
+#page-pin-toggle[aria-pressed="true"]:hover { color: #fff; background: #0b57d0; border-color: #0b57d0; }
+#page-pin-toggle:focus-visible { outline: 2px solid #0b57d0; outline-offset: 2px; }
+#page-pin-toggle:disabled { cursor: not-allowed; opacity: 0.6; }
+#page-pin-status { margin: 0.4rem 0; font-size: 0.85rem; overflow-wrap: anywhere; }
+#page-pin-status.pin-status-error { color: #9c2b18; }

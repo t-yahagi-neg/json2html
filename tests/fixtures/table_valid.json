@@ -1,0 +1,38 @@
+{
+  "columns": [
+    "A",
+    "B",
+    "C"
+  ],
+  "rows": [
+    {
+      "A": "<script>alert(1)</script>",
+      "B": {
+        "type": "link",
+        "text": "検索",
+        "url": "https://example.com/?mode=test&page=1"
+      },
+      "C": {
+        "type": "multiline",
+        "lines": [
+          "通常行",
+          {
+            "type": "link",
+            "text": "公式",
+            "url": "https://example.com/"
+          },
+          "",
+          "<b>文字列</b>"
+        ]
+      }
+    },
+    {
+      "A": "",
+      "B": {
+        "type": "color",
+        "color": "black"
+      },
+      "C": "日本語"
+    }
+  ]
+}

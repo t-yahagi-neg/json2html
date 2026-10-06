@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "type": "link",
+      "text": "一覧",
+      "url": "./index.html"
+    },
+    {
+      "type": "link",
+      "text": "外部",
+      "url": "https://example.com/"
+    },
+    {
+      "type": "text",
+      "text": "説明"
+    }
+  ]
+}

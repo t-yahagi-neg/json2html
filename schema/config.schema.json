@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "config.schema.json",
+  "title": "json2html shared configuration",
+  "description": "表示設定とassetsはコマンドのROOTからページまで順に継承し、最後にtable.jsonで上書きします。省略・null・空文字は継承値または既定値を使用し、空オブジェクトも設定を消去しません。pin_pageはROOT以下の各共通設定で認識し、空でない値で宣言元と子孫のスコープ（適用範囲）を開始します。最も近いスコープを使い、省略・null・空文字は親スコープを継承し、親もなければ無効です。ROOTより上の設定は読みません。titleはtable.json専用です。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "pin_page": {
+      "$ref": "#/$defs/relativePath",
+      "description": "コマンドのROOT以下のjson2html.config.jsonで認識します。宣言元の設定ディレクトリ基準で、そのディレクトリ自身または配下の、有効なtable.jsonがあるディレクトリへの相対パス（例: ./pins）。URL・絶対パス・ファイル指定・宣言元の配下から外れる参照・シンボリックリンク経由の参照やリンクされたtable.jsonは不可。空でない値は宣言元と子孫に独立したスコープ（適用範囲）を開始し、入れ子では最も近いスコープを使います。省略・null・空文字は新しいスコープを作らず親スコープを継承し、親もなければ無効です。専用ページは宣言元と同じスコープに属する必要があり、別の入れ子スコープ内は指定できません。table.jsonの値は使用せず、そのスキーマにも含めません。専用ページの自動探索は行いません。ROOTは探索境界で、ページIDの基準は宣言元です。同じ配置・設定なら、宣言元とその親のどちらから生成してもcurrent_id（現在のページID）とstore_url（保存先URL）は安定します。スコープごとにカタログと共有保存先を分離し、親ROOTでの生成でも専用menu.jsonを保持します。宣言元より内側をROOTにすると親の設定は読まれません。表示設定とassetsの継承は従来どおりコマンドのROOTに従います。実在性・種別・参照範囲・スコープ所属・シンボリックリンクは生成時に確認し、設定不備や専用ページの欠落・不正は公開前に生成を停止します。有効時はassets.jsにpage-pins.jsも必要です。専用ディレクトリ配下にpin-state.htmlを生成し、専用ページの出力失敗時はそれを参照する新しい通常ページを公開しません。変更後はHTMLの再生成が必要です。"
+    },
+    "assets": {
+      "$ref": "#/$defs/assets"
+    },
+    "alignment": {
+      "$ref": "#/$defs/alignment"
+    },
+    "column_options": {
+      "$ref": "#/$defs/columnOptions"
+    },
+    "hidden_column_filter": {
+      "$ref": "#/$defs/hiddenColumnFilter"
+    },
+    "show_warnings": {
+      "$ref": "#/$defs/showWarnings"
+    }
+  },
+  "$defs": {
+    "empty": {
+      "enum": [null, ""]
+    },
+    "relativePath": {
+      "type": ["string", "null"],
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?![/\\\\]).*$",
+      "description": "このフィールドを宣言したJSONファイル基準の相対ローカルパス。絶対パスやURLは指定できません。省略・null・空文字の扱いは各フィールドの説明を参照してください。実在性とファイル/ディレクトリの種別は実行時に確認します。"
+    },
+    "assets": {
+      "oneOf": [
+        { "$ref": "#/$defs/empty" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "css": {
+              "$ref": "#/$defs/relativePath",
+              "description": "スタイルシートのファイルへの相対パス（ディレクトリではありません）。例: ./css/style.css。"
+            },
+            "js": {
+              "$ref": "#/$defs/relativePath",
+              "description": "table-filter.jsとsidebar-toggle.jsを含むディレクトリへの相対パス。pin_pageが有効な場合はpage-pins.jsも必要で、各ページで解決されたディレクトリに不足していれば公開前に生成を停止します。例: ./js。"
+            }
+          }
+        }
+      ]
+    },
+    "alignValue": {
+      "enum": ["left", "center", "right", null, ""],
+      "description": "左寄せ・中央寄せ・右寄せ。省略・null・空文字は継承値または既定値を使用します。"
+    },
+    "alignment": {
+      "oneOf": [
+        { "$ref": "#/$defs/empty" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "header": { "$ref": "#/$defs/alignValue" },
+            "body": { "$ref": "#/$defs/alignValue" }
+          }
+        }
+      ]
+    },
+    "columnOption": {
+      "oneOf": [
+        { "$ref": "#/$defs/empty" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": ["string", "null"],
+              "description": "列の表示ラベル。データのキーとcolumnsは変更しません。未設定時は継承ラベル、なければ元の列名。"
+            },
+            "header_align": { "$ref": "#/$defs/alignValue" },
+            "align": { "$ref": "#/$defs/alignValue" },
+            "visible": {
+              "enum": [true, false, null, ""],
+              "description": "初期表示。省略・null・空文字は継承値、なければtrue。先頭列はfalseを指定しても必ず表示されます。"
+            }
+          }
+        }
+      ]
+    },
+    "columnOptions": {
+      "description": "columnsの列キー別の設定。列ごと・フィールドごとに継承します。",
+      "oneOf": [
+        { "$ref": "#/$defs/empty" },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/columnOption" }
+        }
+      ]
+    },
+    "showWarnings": {
+      "enum": [true, false, null, ""],
+      "default": true,
+      "description": "HTMLの表・メニューの警告欄を表示する真偽値。falseでは警告欄だけを出力せず、警告の検出・CLIの警告件数・致命的エラーの扱いは変わりません。ROOTから下位の共通設定を順に継承し、最後にページのtable.jsonで上書きします。省略・null・空文字は継承値、なければtrue。変更後はHTMLの再生成が必要です。"
+    },
+    "hiddenColumnFilter": {
+      "enum": ["clear", "keep", null, ""],
+      "description": "非表示にした列のフィルターをclearで解除、keepで維持。省略・null・空文字は継承値、なければclear。keepでは非表示列の絞り込み状態を画面に表示します。"
+    }
+  }
+}

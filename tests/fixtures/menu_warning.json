@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "type": "link",
+      "text": "FTP",
+      "url": "ftp://example.com/"
+    },
+    {
+      "type": "link",
+      "text": "",
+      "url": "https://example.com/"
+    },
+    {
+      "type": "unknown",
+      "text": "未対応"
+    },
+    42
+  ]
+}

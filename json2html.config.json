@@ -1,0 +1,14 @@
+{
+  "$schema": "./schema/config.schema.json",
+  "pin_page": "./pins",
+  "assets": {
+    "css": "./css/style.css",
+    "js": "./js"
+  },
+  "alignment": {
+    "header": "center",
+    "body": "left"
+  },
+  "hidden_column_filter": "clear",
+  "show_warnings": true
+}

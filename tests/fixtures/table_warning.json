@@ -1,0 +1,50 @@
+{
+  "columns": [
+    "A",
+    "B",
+    "C"
+  ],
+  "rows": [
+    {
+      "A": {
+        "type": "link",
+        "text": "FTP",
+        "url": "ftp://example.com/"
+      },
+      "B": {
+        "type": "color",
+        "color": "red"
+      },
+      "C": {
+        "type": "multiline",
+        "lines": [
+          {
+            "type": "link",
+            "text": "URLなし",
+            "url": ""
+          },
+          {
+            "type": "color",
+            "color": "black"
+          },
+          42
+        ]
+      },
+      "UNKNOWN": "無視"
+    },
+    {
+      "A": "通常",
+      "B": {
+        "type": "multiline",
+        "lines": [
+          "説明",
+          {
+            "type": "link",
+            "text": "リンクにしない",
+            "url": "https://example.com/"
+          }
+        ]
+      }
+    }
+  ]
+}

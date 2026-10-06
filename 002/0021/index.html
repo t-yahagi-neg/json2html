@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0021 非表示時もフィルター維持</title>
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+  <div class="page-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-toolbar">
+        <button
+          type="button"
+          class="sidebar-toggle"
+          id="sidebar-toggle"
+          aria-expanded="true"
+          aria-controls="menu-frame"
+          title="メニューを縮小">
+          <span class="sidebar-toggle-icon" aria-hidden="true">«</span>
+          <span class="sidebar-toggle-label">メニュー</span>
+        </button>
+      </div>
+      <iframe
+        id="menu-frame"
+        src="./menu.html"
+        class="menu-frame"
+        title="メニュー">
+      </iframe>
+    </aside>
+
+    <main class="main-content">
+      <header class="page-header">
+        <h1>0021 非表示時もフィルター維持</h1>
+      </header>
+
+      <section class="table-section">
+        <div class="table-filter-bar">
+          <span class="table-filter-status" id="table-filter-status" aria-live="polite"></span>
+          <button type="button" class="table-filter-clear" id="table-columns-toggle"
+            aria-expanded="false" aria-controls="table-columns-panel" aria-haspopup="dialog">
+            表示列
+          </button>
+          <button type="button" class="table-filter-clear" id="table-filter-clear">
+            すべてのフィルターをクリア
+          </button>
+          <button type="button" class="table-filter-clear" id="page-pin-toggle"
+            aria-pressed="false" disabled>ピン留め</button>
+          <span id="page-pin-status" class="pin-status" role="status" aria-live="polite" hidden></span>
+        </div>
+        <div class="table-scroll">
+          <table id="data-table" data-hidden-column-filter="keep">
+            <thead>
+              <tr>
+                <th data-column-key="ID" data-column-label="ID" data-initial-visible="true">
+                  <div class="th-head">
+                    <span class="th-label" style="text-align: center">ID</span>
+                    <button type="button" class="table-filter-toggle" data-col-index="0" aria-expanded="false" aria-haspopup="dialog" title="ID のフィルター" aria-label="ID のフィルター">
+                      <span class="table-filter-toggle-icon" aria-hidden="true">▾</span>
+                    </button>
+                  </div>
+                </th>
+                <th data-column-key="分類" data-column-label="分類" data-initial-visible="true">
+                  <div class="th-head">
+                    <span class="th-label" style="text-align: center">分類</span>
+                    <button type="button" class="table-filter-toggle" data-col-index="1" aria-expanded="false" aria-haspopup="dialog" title="分類 のフィルター" aria-label="分類 のフィルター">
+                      <span class="table-filter-toggle-icon" aria-hidden="true">▾</span>
+                    </button>
+                  </div>
+                </th>
+                <th data-column-key="担当" data-column-label="担当" data-initial-visible="true">
+                  <div class="th-head">
+                    <span class="th-label" style="text-align: center">担当</span>
+                    <button type="button" class="table-filter-toggle" data-col-index="2" aria-expanded="false" aria-haspopup="dialog" title="担当 のフィルター" aria-label="担当 のフィルター">
+                      <span class="table-filter-toggle-icon" aria-hidden="true">▾</span>
+                    </button>
+                  </div>
+                </th>
+                <th data-column-key="説明" data-column-label="説明" data-initial-visible="true">
+                  <div class="th-head">
+                    <span class="th-label" style="text-align: center">説明</span>
+                    <button type="button" class="table-filter-toggle" data-col-index="3" aria-expanded="false" aria-haspopup="dialog" title="説明 のフィルター" aria-label="説明 のフィルター">
+                      <span class="table-filter-toggle-icon" aria-hidden="true">▾</span>
+                    </button>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="text-align: left" data-filter-value="K-01" data-filter-label="K-01">K-01</td>
+                <td style="text-align: left" data-filter-value="A" data-filter-label="A">A</td>
+                <td style="text-align: left" data-filter-value="佐藤" data-filter-label="佐藤">佐藤</td>
+                <td style="text-align: left" class="multiline-cell" data-filter-value="分類をAだけに絞り込んでから、分類列を非表示にしてください。" data-filter-label="分類をAだけに絞り込んでから、分類列を非表示にしてください。">
+                  <div class="multiline-line">分類をAだけに絞り込んでから、分類列を非表示にしてください。</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="text-align: left" data-filter-value="K-02" data-filter-label="K-02">K-02</td>
+                <td style="text-align: left" data-filter-value="B" data-filter-label="B">B</td>
+                <td style="text-align: left" data-filter-value="鈴木" data-filter-label="鈴木">鈴木</td>
+                <td style="text-align: left" class="multiline-cell" data-filter-value="非表示でも絞り込みは維持され、この行は表示されません。" data-filter-label="非表示でも絞り込みは維持され、この行は表示されません。">
+                  <div class="multiline-line">非表示でも絞り込みは維持され、この行は表示されません。</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="text-align: left" data-filter-value="K-03" data-filter-label="K-03">K-03</td>
+                <td style="text-align: left" data-filter-value="A" data-filter-label="A">A</td>
+                <td style="text-align: left" data-filter-value="田中" data-filter-label="田中">田中</td>
+                <td style="text-align: left" class="multiline-cell" data-filter-value="2件のままで、非表示列のフィルター適用中というメッセージが出ます。 / 再読み込みやHTML再生成後も状態を復元します。" data-filter-label="2件のままで、非表示列のフィルター適用中というメッセージが出ます。 / 再読み込みやHTML再生成後も状態を復元します。">
+                  <div class="multiline-line">2件のままで、非表示列のフィルター適用中というメッセージが出ます。</div>
+                  <div class="multiline-line">再読み込みやHTML再生成後も状態を復元します。</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div
+    id="table-filter-panel"
+    class="table-filter-panel"
+    hidden
+    role="dialog"
+    aria-label="列フィルター">
+  </div>
+  <div id="table-columns-panel" class="table-columns-panel" hidden
+    role="dialog" aria-label="表示列の設定"></div>
+  <script src="../../js/table-filter.js" defer></script>
+  <script src="../../js/sidebar-toggle.js" defer></script>
+  <script id="json2html-pins" type="application/json">{"role": "page", "store_url": "../../pins/pin-state.html", "current_id": "002/0021/index.html", "hub": false, "entries": [{"id": "index.html", "title": "json2html 検証トップ", "url": "../../index.html"}, {"id": "001/index.html", "title": "001 基本表示・フィルター", "url": "../../001/index.html"}, {"id": "002/index.html", "title": "002 列表示・非表示時に解除", "url": "../index.html"}, {"id": "002/0021/index.html", "title": "0021 非表示時もフィルター維持", "url": "index.html"}, {"id": "002/0022/index.html", "title": "0022 初期表示・ラベル・配置", "url": "../0022/index.html"}, {"id": "003/index.html", "title": "003 子階層の共通設定", "url": "../../003/index.html"}, {"id": "003/0031/index.html", "title": "0031", "url": "../../003/0031/index.html"}, {"id": "pins/index.html", "title": "ピン留め", "url": "../../pins/index.html"}], "order": ["index.html", "001/index.html", "002/index.html", "003/index.html"], "exclude_ids": ["pins/index.html", "index.html"]}</script>
+  <script src="../../js/page-pins.js" defer></script>
+</body>
+</html>

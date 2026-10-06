@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "menu.schema.json",
+  "title": "json2html menu data",
+  "type": "object",
+  "required": [
+    "items"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/textItem"
+          },
+          {
+            "$ref": "#/$defs/linkItem"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "textItem": {
+      "type": "object",
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "linkItem": {
+      "type": "object",
+      "required": [
+        "type",
+        "text",
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "link"
+        },
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

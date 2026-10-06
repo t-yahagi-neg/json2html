@@ -1,0 +1,80 @@
+{
+  "$schema": "../../schema/table.schema.json",
+  "title": "0022 初期表示・ラベル・配置",
+  "columns": [
+    "id",
+    "name",
+    "quantity",
+    "checked",
+    "memo"
+  ],
+  "alignment": {
+    "header": "center",
+    "body": "left"
+  },
+  "column_options": {
+    "id": {
+      "label": "番号（常に表示）",
+      "visible": false
+    },
+    "name": {
+      "label": "品名"
+    },
+    "quantity": {
+      "label": "数量",
+      "align": "right",
+      "header_align": "right"
+    },
+    "checked": {
+      "label": "確認印",
+      "visible": false
+    },
+    "memo": {
+      "label": "説明"
+    }
+  },
+  "rows": [
+    {
+      "id": "R-01",
+      "name": "商品A",
+      "quantity": "1200",
+      "checked": {
+        "type": "color",
+        "color": "black"
+      },
+      "memo": {
+        "type": "multiline",
+        "lines": [
+          "先頭列にvisible:falseを指定しても常に表示されます。"
+        ]
+      }
+    },
+    {
+      "id": "R-02",
+      "name": "商品B",
+      "quantity": "25",
+      "checked": "",
+      "memo": {
+        "type": "multiline",
+        "lines": [
+          "確認印は初期状態で非表示です。表示を変更し、パネル内のリセットを試してください。"
+        ]
+      }
+    },
+    {
+      "id": "R-03",
+      "name": "商品C",
+      "quantity": "3",
+      "checked": {
+        "type": "color",
+        "color": "black"
+      },
+      "memo": {
+        "type": "multiline",
+        "lines": [
+          "数量のヘッダーとデータは右寄せ、ほかのデータは左寄せです。"
+        ]
+      }
+    }
+  ]
+}

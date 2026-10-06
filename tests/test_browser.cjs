@@ -1,0 +1,166 @@
+// Integration checks against generated file:// pages. Requires Playwright + Chrome.
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const { execFileSync } = require('node:child_process');
+const { chromium } = require('playwright');
+
+const project = path.resolve(__dirname, '..');
+const fixture = fs.mkdtempSync(path.join(project, '..', '.browser-json2html-'));
+const root = path.join(fixture, '00');
+fs.mkdirSync(root);
+
+function writePage(name, extra = {}) {
+  const dir = path.join(root, name);
+  fs.mkdirSync(dir, { recursive: true });
+  const data = {
+    title: name || '親ページ',
+    columns: ['A', 'B', 'C'],
+    rows: [
+      { A: '1', B: 'x', C: 'u' },
+      { A: '2', B: 'y', C: 'v' },
+      { A: '3', B: 'x', C: 'w' },
+    ],
+    column_options: { A: { visible: false }, B: { label: '分類' }, C: { visible: false } },
+    ...extra,
+  };
+  fs.writeFileSync(path.join(dir, 'table.json'), JSON.stringify(data));
+  return dir;
+}
+function generate() {
+  return execFileSync(process.env.PYTHON || 'python3', [path.join(project, 'generate.py'), root], {
+    encoding: 'utf8', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' },
+  });
+}
+function url(dir = root) { return pathToFileURL(path.join(dir, 'index.html')).href; }
+async function visibleRows(page) {
+  return page.locator('#data-table tbody tr:not([hidden])').count();
+}
+async function filterX(page, index = 1) {
+  await page.locator(`.table-filter-toggle[data-col-index="${index}"]`).click();
+  await page.locator('#table-filter-panel input[data-filter-value="x"]').uncheck();
+  await page.keyboard.press('Escape');
+}
+async function setColumn(page, index, checked) {
+  await page.locator('#table-columns-toggle').click();
+  await page.locator(`#table-columns-panel input[data-column-index="${index}"]`).setChecked(checked);
+  await page.keyboard.press('Escape');
+}
+
+test('generated HTML works directly from disk', async (t) => {
+  let passed = false;
+  const browser = await chromium.launch({
+    executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    headless: true,
+  });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  async function reset(extra = {}) {
+    writePage('', extra);
+    generate();
+    await page.goto(url());
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+  }
+  try {
+    writePage('001');
+    writePage('002');
+    writePage('002/0021');
+    fs.writeFileSync(path.join(root, 'json2html.config.json'), JSON.stringify({
+      assets: {
+        css: path.relative(root, path.join(project, 'css/style.css')),
+        js: path.relative(root, path.join(project, 'js')),
+      },
+      alignment: { header: 'center', body: 'left' },
+    }));
+
+    await t.test('shared assets, menu navigation, alignment, first-column lock and reset', async () => {
+      await reset();
+      assert.equal(await page.title(), '親ページ');
+      assert.equal(await page.locator('tbody td').first().evaluate(el => getComputedStyle(el).textAlign), 'left');
+      assert.equal(await page.locator('.th-label').first().evaluate(el => getComputedStyle(el).textAlign), 'center');
+      assert.equal(await page.locator('thead th').nth(2).isVisible(), false);
+      await page.locator('#table-columns-toggle').click();
+      const first = page.locator('#table-columns-panel input').first();
+      assert.equal(await first.isChecked(), true);
+      assert.equal(await first.isDisabled(), true);
+      await page.locator('#table-columns-panel input[data-column-index="2"]').check();
+      assert.equal(await page.locator('thead th').nth(2).isVisible(), true);
+      await page.locator('.table-columns-reset').click();
+      assert.equal(await page.locator('thead th').nth(2).isVisible(), false);
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#table-columns-toggle').evaluate(el => el === document.activeElement), true);
+      await page.frameLocator('#menu-frame').getByRole('link', { name: '002', exact: true }).click();
+      await page.waitForURL(url(path.join(root, '002')));
+      assert.equal(await page.locator('#table-columns-toggle').isVisible(), true);
+      const labels = await page.frameLocator('#menu-frame').locator('a').allTextContents();
+      assert.deepEqual(labels, ['親ページ', '001', '002/0021']);
+    });
+
+    await t.test('clear-on-hide removes filters; visibility and filters survive reload separately', async () => {
+      await reset();
+      await filterX(page);
+      assert.equal(await visibleRows(page), 1);
+      await page.reload();
+      assert.equal(await visibleRows(page), 1);
+      await setColumn(page, 1, false);
+      assert.equal(await visibleRows(page), 3);
+      await page.reload();
+      assert.equal(await page.locator('thead th').nth(1).isVisible(), false);
+      assert.equal(await visibleRows(page), 3);
+      await page.locator('#table-filter-clear').click();
+      assert.equal(await page.locator('thead th').nth(1).isVisible(), false);
+      assert.doesNotMatch(await page.locator('#table-filter-status').textContent(), /非表示列/);
+    });
+
+    await t.test('keep-on-hide retains filters and explains hidden filtering', async () => {
+      await reset({ hidden_column_filter: 'keep' });
+      await filterX(page);
+      await setColumn(page, 1, false);
+      assert.equal(await visibleRows(page), 1);
+      assert.match(await page.locator('#table-filter-status').textContent(), /非表示列/);
+      await page.reload();
+      assert.equal(await visibleRows(page), 1);
+      assert.equal(await page.locator('thead th').nth(1).isVisible(), false);
+      await page.locator('#table-filter-clear').click();
+      assert.equal(await visibleRows(page), 3);
+    });
+
+    await t.test('regeneration and column reordering preserve key-based filters and new values stay visible', async () => {
+      await reset();
+      await filterX(page);
+      writePage('', {
+        title: '再生成後', columns: ['A', 'C', 'B'],
+        rows: [{ A: '1', B: 'x', C: 'u' }, { A: '2', B: 'y', C: 'v' }, { A: '4', B: 'z', C: 'new' }],
+      });
+      generate();
+      await page.reload();
+      assert.equal(await page.title(), '再生成後');
+      assert.equal(await visibleRows(page), 2);
+      assert.equal(await page.locator('thead th').nth(1).isVisible(), false);
+      await page.goto(url(path.join(root, '001')));
+      assert.equal(await visibleRows(page), 3);
+    });
+
+    await t.test('sidebar still toggles and persists', async () => {
+      await reset();
+      await page.locator('#sidebar-toggle').click();
+      assert.equal(await page.locator('#sidebar').evaluate(el => el.classList.contains('is-collapsed')), true);
+      await page.reload();
+      assert.equal(await page.locator('#sidebar').evaluate(el => el.classList.contains('is-collapsed')), true);
+      await page.locator('#sidebar-toggle').click();
+      await page.locator('#table-columns-toggle').click();
+      await page.screenshot({ path: path.join(fixture, 'columns.png'), fullPage: true });
+      assert.deepEqual(errors, []);
+    });
+    passed = true;
+  } finally {
+    await browser.close();
+    if (passed && !process.env.KEEP_BROWSER_FIXTURE) fs.rmSync(fixture, { recursive: true });
+    else console.error('Browser test fixtures retained:', fixture);
+  }
+});
