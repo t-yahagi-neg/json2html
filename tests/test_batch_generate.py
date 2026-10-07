@@ -51,6 +51,156 @@ class BatchTests(unittest.TestCase):
             **extra,
         )
 
+    def breadcrumbs(self, directory):
+        document = (directory / "index.html").read_text()
+        match = re.search(
+            r'<nav class="breadcrumbs" aria-label="パンくず"><ol>(.*?)</ol></nav>',
+            document,
+        )
+        self.assertIsNotNone(match)
+        self.assertLess(match.start(), document.index("<h1>"))
+        self.assertEqual(1, match.group(1).count('aria-current="page"'))
+        return match.group(1)
+
+    def test_breadcrumbs_three_levels_and_root_current(self):
+        root = self.page("", title="最上位")
+        parent = self.page("parent", title="親ページ")
+        child = self.page("parent/child", title="現在ページ")
+        batch.generate_tree(self.root)
+        self.assertEqual('<li aria-current="page">最上位</li>', self.breadcrumbs(root))
+        self.assertEqual(
+            '<li><a href="../index.html">最上位</a></li>'
+            '<li aria-current="page">親ページ</li>',
+            self.breadcrumbs(parent),
+        )
+        self.assertEqual(
+            '<li><a href="../../index.html">最上位</a></li>'
+            '<li><a href="../index.html">親ページ</a></li>'
+            '<li aria-current="page">現在ページ</li>',
+            self.breadcrumbs(child),
+        )
+
+    def test_breadcrumbs_keep_missing_ancestors_including_root(self):
+        child = self.page("missing/child", title="子")
+        batch.generate_tree(self.root)
+        self.assertEqual(
+            '<li>00</li><li>missing</li><li aria-current="page">子</li>',
+            self.breadcrumbs(child),
+        )
+        self.page("", title="ROOT")
+        batch.generate_tree(self.root)
+        self.assertEqual(
+            '<li><a href="../../index.html">ROOT</a></li>'
+            '<li>missing</li><li aria-current="page">子</li>',
+            self.breadcrumbs(child),
+        )
+
+    def test_breadcrumbs_never_link_above_generation_root(self):
+        self.page("", title="outside")
+        subtree = self.page("parent", title="限定ROOT")
+        child = self.page("parent/child", title="子")
+        batch.generate_tree(subtree)
+        self.assertEqual(
+            '<li aria-current="page">限定ROOT</li>', self.breadcrumbs(subtree)
+        )
+        self.assertEqual(
+            '<li><a href="../index.html">限定ROOT</a></li>'
+            '<li aria-current="page">子</li>',
+            self.breadcrumbs(child),
+        )
+
+    def test_breadcrumbs_encode_urls_and_escape_resolved_titles(self):
+        self.page("", title='<ROOT & "title">')
+        self.page("日本語 # %", title="")
+        self.page("日本語 # %/親", title="<親>")
+        child = self.page("日本語 # %/親/child", title="<子>")
+        hidden = self.page(".hidden/child")
+        (self.root / "linked").symlink_to(child.parent, target_is_directory=True)
+        results = batch.generate_tree(self.root)
+        self.assertEqual(4, len(results))
+        self.assertFalse((hidden / "index.html").exists())
+        self.assertEqual(
+            '<li><a href="../../../index.html">&lt;ROOT &amp; &quot;title&quot;&gt;</a></li>'
+            '<li><a href="../../index.html">日本語 # %</a></li>'
+            '<li><a href="../index.html">&lt;親&gt;</a></li>'
+            '<li aria-current="page">&lt;子&gt;</li>',
+            self.breadcrumbs(child),
+        )
+        # Ancestor links are relative ../ paths even when directory names need encoding.
+        self.assertNotIn("%2523", self.breadcrumbs(child))
+
+    def test_breadcrumbs_remove_failed_ancestor_link_after_publish_retry(self):
+        self.page("", title="ROOT")
+        parent = self.page("parent", title="失敗する親")
+        child = self.page("parent/child", title="子")
+        batch.generate_tree(self.root)
+        old_parent = (parent / "index.html").read_bytes()
+        self.page("parent", title="更新失敗")
+        publish = batch.publish
+
+        def fail_parent(documents):
+            if next(iter(documents)).parent == parent:
+                raise OSError("injected ancestor failure")
+            return publish(documents)
+
+        with mock.patch.object(batch, "publish", side_effect=fail_parent):
+            results = {r.directory: r.status for r in batch.generate_tree(self.root)}
+        self.assertEqual("ERROR", results[parent])
+        self.assertEqual("OK", results[child])
+        self.assertEqual(old_parent, (parent / "index.html").read_bytes())
+        self.assertEqual(
+            '<li><a href="../../index.html">ROOT</a></li>'
+            '<li>parent</li><li aria-current="page">子</li>',
+            self.breadcrumbs(child),
+        )
+
+    def test_breadcrumbs_invalid_ancestor_is_unlinked_despite_old_output(self):
+        self.page("", title="ROOT")
+        parent = self.page("parent", title="親")
+        child = self.page("parent/child", title="子")
+        batch.generate_tree(self.root)
+        (parent / "table.json").write_text("{")
+        batch.generate_tree(self.root)
+        self.assertEqual(
+            '<li><a href="../../index.html">ROOT</a></li>'
+            '<li>parent</li><li aria-current="page">子</li>',
+            self.breadcrumbs(child),
+        )
+
+    def test_breadcrumbs_ancestor_failure_on_retry_removes_published_link(self):
+        self.page("", title="ROOT")
+        parent = self.page("parent", title="親")
+        child = self.page("parent/child", title="子")
+        failing = self.page("zz-failing")
+        publish = batch.publish
+        parent_attempts = 0
+
+        def fail_on_retry(documents):
+            nonlocal parent_attempts
+            directory = next(iter(documents)).parent
+            if directory == failing:
+                raise OSError("force another pass")
+            if directory == parent:
+                parent_attempts += 1
+                if parent_attempts == 2:
+                    self.assertIn(
+                        '<a href="../index.html">親</a>', self.breadcrumbs(child)
+                    )
+                    raise OSError("ancestor fails during retry")
+            return publish(documents)
+
+        with mock.patch.object(batch, "publish", side_effect=fail_on_retry):
+            results = {r.directory: r.status for r in batch.generate_tree(self.root)}
+        self.assertEqual(2, parent_attempts)
+        self.assertEqual("ERROR", results[parent])
+        self.assertEqual("ERROR", results[failing])
+        self.assertEqual("OK", results[child])
+        self.assertEqual(
+            '<li><a href="../../index.html">ROOT</a></li>'
+            '<li>parent</li><li aria-current="page">子</li>',
+            self.breadcrumbs(child),
+        )
+
     def test_show_warnings_defaults_to_true(self):
         self.assertIs(True, page_settings.defaults()["show_warnings"])
         directory = self.warning_page("")

@@ -416,6 +416,7 @@ body {
 
 .table-filter-panel-actions {
   display: flex;
+  flex-wrap: wrap;
   flex-shrink: 0;
   gap: 0.5rem;
   padding: 0.4rem 0.65rem;
@@ -573,6 +574,68 @@ tbody td:first-child {
   background: #fff;
 }
 
+tbody td.is-frozen {
+  position: sticky;
+  z-index: 2;
+  background: #fff;
+}
+thead th.is-frozen {
+  z-index: 4;
+}
+
+.table-columns-panel .table-filter-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.table-columns-panel .table-filter-option > label:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.table-columns-panel .column-freeze {
+  flex-shrink: 0;
+}
+
+.breadcrumbs {
+  margin-bottom: 8px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.breadcrumbs li + li::before {
+  content: "/";
+  margin-right: 6px;
+  color: #687078;
+}
+
+.breadcrumbs a {
+  color: #0b57d0;
+}
+
+th[aria-sort="ascending"] .th-label::after {
+  content: " ↑";
+}
+
+th[aria-sort="descending"] .th-label::after {
+  content: " ↓";
+}
+
+.table-filter-panel [data-sort][aria-pressed="true"] {
+  background: #dce9fa;
+}
+
 thead th:first-child {
   position: sticky;
   top: 0;
@@ -597,7 +660,8 @@ td.cell-black {
 }
 
 /* 1列目が黒塗りのときもスクロール透過を防ぐ */
-tbody td.cell-black:first-child {
+tbody td.cell-black:first-child,
+tbody td.cell-black.is-frozen {
   background: #000;
 }
 

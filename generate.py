@@ -10,7 +10,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from page_settings import SettingsError, defaults, merge_settings, title_for
 from pin_support import scripts as pin_scripts
@@ -20,6 +20,14 @@ MENU_TITLE = "メニュー"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+
+
+class BreadcrumbLabel(TypedDict):
+    title: str
+
+
+class BreadcrumbItem(BreadcrumbLabel, total=False):
+    url: str | None
 
 
 class GenerationError(Exception):
@@ -369,6 +377,7 @@ def build_index(
     settings: dict[str, Any] | None = None,
     pin_data: dict[str, Any] | None = None,
     pin_js_url: str = "./js/page-pins.js",
+    breadcrumbs: list[BreadcrumbItem] | None = None,
 ) -> tuple[str, list[str]]:
     columns, rows = validate_table_structure(table_data)
     try:
@@ -457,6 +466,17 @@ def build_index(
       </section>"""
 
     title = html_escape(page_title)
+    ancestors = []
+    for item in breadcrumbs or []:
+        label = html_escape(item["title"])
+        url = item.get("url")
+        content = f'<a href="{html_escape(url)}">{label}</a>' if url else label
+        ancestors.append(f"<li>{content}</li>")
+    breadcrumb_html = (
+        '<nav class="breadcrumbs" aria-label="パンくず"><ol>'
+        + "".join(ancestors)
+        + f'<li aria-current="page">{title}</li></ol></nav>'
+    )
     css_url = html_escape(settings.get("css_url", "./css/style.css"))
     filter_js_url = html_escape(settings.get("filter_js_url", "./js/table-filter.js"))
     sidebar_js_url = html_escape(
@@ -503,6 +523,7 @@ def build_index(
 
     <main class="main-content">
       <header class="page-header">
+        {breadcrumb_html}
         <h1>{title}</h1>
       </header>
 

@@ -17,6 +17,40 @@ import generate  # noqa: E402
 
 
 class GenerateTests(unittest.TestCase):
+    def test_single_page_breadcrumb_is_current_without_link(self) -> None:
+        for breadcrumbs in (None, []):
+            with self.subTest(breadcrumbs=breadcrumbs):
+                document, _ = generate.build_index(
+                    {"columns": ["A"], "rows": [], "title": "単ページ"},
+                    breadcrumbs=breadcrumbs,
+                )
+                nav = (
+                    '<nav class="breadcrumbs" aria-label="パンくず"><ol>'
+                    '<li aria-current="page">単ページ</li></ol></nav>'
+                )
+                self.assertIn(nav, document)
+                self.assertLess(document.index(nav), document.index("<h1>"))
+
+    def test_breadcrumbs_escape_labels_and_urls_and_keep_unlinked_ancestors(self):
+        document, _ = generate.build_index(
+            {"columns": ["A"], "rows": []},
+            '<current & "page">',
+            breadcrumbs=[
+                {"title": '<root & "page">', "url": '../index.html?a=1&b="2"'},
+                {"title": "<missing>", "url": None},
+                {"title": "no URL"},
+            ],
+        )
+        self.assertIn(
+            '<ol><li><a href="../index.html?a=1&amp;b=&quot;2&quot;">'
+            "&lt;root &amp; &quot;page&quot;&gt;</a></li>"
+            "<li>&lt;missing&gt;</li><li>no URL</li>"
+            '<li aria-current="page">&lt;current &amp; &quot;page&quot;&gt;</li>'
+            "</ol></nav>",
+            document,
+        )
+        self.assertEqual(1, document.count('aria-current="page"'))
+
     def load_fixture(self, name: str) -> object:
         with (FIXTURES_DIR / name).open(encoding="utf-8") as source:
             return json.load(source)

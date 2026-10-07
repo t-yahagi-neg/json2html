@@ -106,6 +106,27 @@ def menu_for(
     }
 
 
+def breadcrumbs_for(
+    directory: Path, root: Path, pages: dict[Path, Page]
+) -> list[generate.BreadcrumbItem]:
+    """Keep every ancestor's position, but link only surviving generated pages."""
+    relative = directory.relative_to(root)
+    ancestors: list[generate.BreadcrumbItem] = []
+    ancestor = root
+    for part in relative.parts:
+        page = pages.get(ancestor)
+        ancestors.append(
+            {
+                "title": page.title if page is not None else ancestor.name,
+                "url": relative_url(ancestor / "index.html", directory)
+                if page is not None
+                else None,
+            }
+        )
+        ancestor /= part
+    return ancestors
+
+
 def publish(documents: dict[Path, str]) -> bool:
     """Return False if all outputs are byte-identical; otherwise replace as a group."""
     if all(
@@ -255,6 +276,7 @@ def _generate_tree(root: Path, cleanup: ExitStack) -> list[GenerationResult]:
                 pin_data = None
                 pin_js_url = "./js/page-pins.js"
                 index_html = page.index_html
+                breadcrumbs = breadcrumbs_for(directory, root, pages)
                 if hub is not None:
                     scope_pages = {
                         path: value
@@ -272,6 +294,14 @@ def _generate_tree(root: Path, cleanup: ExitStack) -> list[GenerationResult]:
                         settings=page.settings,
                         pin_data=pin_data,
                         pin_js_url=pin_js_url,
+                        breadcrumbs=breadcrumbs,
+                    )
+                else:
+                    index_html, _ = generate.build_index(
+                        page.data,
+                        page.title,
+                        settings=page.settings,
+                        breadcrumbs=breadcrumbs,
                     )
                 menu_html, _ = generate.build_menu(
                     menu,

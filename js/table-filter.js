@@ -44,6 +44,7 @@
         label: header.getAttribute("data-column-label") || (label || header).textContent.trim(),
         initialVisible: locked || header.getAttribute("data-initial-visible") !== "false",
         locked: locked,
+        frozen: locked,
         visible: true
       };
     });
@@ -52,23 +53,35 @@
     var valueCache = rows.map(function (row) {
       return columns.map(function (_, index) { return cellFilterValue(row.cells[index]); });
     });
+    var labelCache = rows.map(function (row) {
+      return columns.map(function (_, index) { return cellFilterLabel(row.cells[index]); });
+    });
+    var columnCells = columns.map(function (_, index) {
+      return Array.prototype.map.call(table.rows, function (row) { return row.cells[index]; })
+        .filter(Boolean);
+    });
+    var frozenLayout = [];
     var keepHiddenFilters = table.getAttribute("data-hidden-column-filter") === "keep";
     var storageKey = "json2html:table-state:v1:" +
       (table.getAttribute("data-state-key") || window.location.href.split("#")[0]);
     var openCol = null;
     var filterAnchor = null;
+    var sortState = null;
 
     function restoreState() {
       var saved;
       try {
         saved = JSON.parse(window.localStorage.getItem(storageKey));
       } catch (_) { /* Storage may be blocked, unavailable, or corrupt. */ }
-      var savedColumns = saved && saved.version === 1 && saved.columns;
+      // One version gate covers visibility, filtering, freezing AND sorting.
+      if (!saved || saved.version !== 1) { saved = null; }
+      var savedColumns = saved && saved.columns;
       columns.forEach(function (column, index) {
         var previous = savedColumns && Object.prototype.hasOwnProperty.call(savedColumns, column.key)
           ? savedColumns[column.key] : null;
         column.visible = column.locked || (previous && typeof previous.visible === "boolean"
           ? previous.visible : column.initialVisible);
+        column.frozen = column.locked || !!(previous && previous.frozen === true);
         var selected = ensureColumnState(index);
         if (previous && previous.selected && (column.visible || keepHiddenFilters)) {
           Object.keys(selected).forEach(function (value) {
@@ -77,6 +90,10 @@
           });
         }
       });
+      if (saved && saved.sort && columns.some(function (column) { return column.key === saved.sort.key; }) &&
+          (saved.sort.direction === "asc" || saved.sort.direction === "desc")) {
+        sortState = { key: saved.sort.key, direction: saved.sort.direction };
+      }
     }
 
     function saveState() {
@@ -84,11 +101,12 @@
       columns.forEach(function (column, index) {
         savedColumns[column.key] = {
           visible: column.visible,
+          frozen: column.frozen,
           selected: ensureColumnState(index)
         };
       });
       try {
-        window.localStorage.setItem(storageKey, JSON.stringify({ version: 1, columns: savedColumns }));
+        window.localStorage.setItem(storageKey, JSON.stringify({ version: 1, columns: savedColumns, sort: sortState }));
       } catch (_) { /* Filtering must remain usable without localStorage. */ }
     }
 
@@ -99,6 +117,51 @@
           if (row.cells[index]) { row.cells[index].hidden = !column.visible; }
         });
       });
+      applyFrozenColumns();
+    }
+
+    // Only visible frozen columns contribute to the horizontal offset.
+    function applyFrozenColumns() {
+      // Read layout before writing styles; never measure each body cell.
+      var widths = columns.map(function (column, index) {
+        return column.visible && column.frozen ? headers[index].getBoundingClientRect().width : 0;
+      });
+      var left = 0;
+      columns.forEach(function (column, index) {
+        var frozen = column.visible && column.frozen;
+        var offset = frozen ? left + "px" : "";
+        var previous = frozenLayout[index];
+        if (!previous || previous.frozen !== frozen || previous.offset !== offset) {
+          columnCells[index].forEach(function (cell) {
+            if (!previous || previous.frozen !== frozen) { cell.classList.toggle("is-frozen", frozen); }
+            if (cell.style.left !== offset) { cell.style.left = offset; }
+          });
+          frozenLayout[index] = { frozen: frozen, offset: offset };
+        }
+        if (frozen) { left += widths[index]; }
+      });
+    }
+
+    function applySort() {
+      var index = sortState ? columns.findIndex(function (column) { return column.key === sortState.key; }) : -1;
+      var ordered = rows.map(function (row, ordinal) { return { row: row, ordinal: ordinal }; });
+      if (index >= 0) {
+        var collator = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
+        ordered.sort(function (a, b) {
+          var av = valueCache[a.ordinal][index], bv = valueCache[b.ordinal][index];
+          if (av === EMPTY_VALUE && bv !== EMPTY_VALUE) { return 1; }
+          if (bv === EMPTY_VALUE && av !== EMPTY_VALUE) { return -1; }
+          // Keys retain filter identity; labels represent links/multiline/colors to the user.
+          var comparison = collator.compare(labelCache[a.ordinal][index], labelCache[b.ordinal][index]);
+          return (sortState.direction === "desc" ? -comparison : comparison) || a.ordinal - b.ordinal;
+        });
+      }
+      ordered.forEach(function (item) { tbody.appendChild(item.row); });
+      headers.forEach(function (header, ordinal) {
+        header.setAttribute("aria-sort", ordinal === index ?
+          (sortState.direction === "asc" ? "ascending" : "descending") : "none");
+      });
+      applyFrozenColumns();
     }
 
     /** チェックONか（未設定もON扱い） */
@@ -118,8 +181,19 @@
       if (raw !== null && raw !== "") {
         return raw;
       }
-      var text = (cell.textContent || "").replace(/\s+/g, " ").trim();
+      var text = displayText(cell);
       return text === "" ? EMPTY_VALUE : text;
+    }
+
+    function displayText(cell) {
+      // textContent alone joins adjacent multiline divs and ignores br separators.
+      function text(node) {
+        if (node.nodeType === 3) { return node.nodeValue; }
+        if (node.nodeName === "BR") { return " "; }
+        var result = Array.prototype.map.call(node.childNodes, text).join("");
+        return result + (node.nodeName === "DIV" || node.nodeName === "P" ? " " : "");
+      }
+      return text(cell).replace(/\s+/g, " ").trim();
     }
 
     function cellFilterLabel(cell) {
@@ -134,7 +208,7 @@
       if (label !== null && label !== "") {
         return label;
       }
-      var text = (cell.textContent || "").replace(/\s+/g, " ").trim();
+      var text = displayText(cell);
       return text === "" ? "(空白)" : text;
     }
 
@@ -142,9 +216,8 @@
       if (optionCache[colIndex]) { return optionCache[colIndex]; }
       var map = Object.create(null);
       for (var r = 0; r < rows.length; r++) {
-        var cell = rows[r].cells[colIndex];
         var value = valueCache[r][colIndex];
-        var label = cellFilterLabel(cell);
+        var label = labelCache[r][colIndex];
         if (!Object.prototype.hasOwnProperty.call(map, value)) {
           map[value] = label;
         }
@@ -268,6 +341,8 @@
         }
       }
       updateToggleActiveState();
+      // Hidden rows can change auto-layout column widths.
+      applyFrozenColumns();
       saveState();
     }
 
@@ -343,7 +418,10 @@
           escapeAttr(column.key) + '"' +
           (column.visible ? ' checked' : '') + (column.locked ? ' disabled' : '') + '>' +
           '<span class="table-filter-option-label">' + escapeHtml(column.label) +
-          (column.locked ? '（常に表示）' : '') + '</span></label></li>';
+          (column.locked ? '（常に表示）' : '') + '</span></label>' +
+          '<label class="column-freeze"><input type="checkbox" data-freeze-index="' + index + '"' +
+          (column.frozen ? ' checked' : '') + (column.locked ? ' disabled' : '') +
+          '>固定</label></li>';
       });
       columnsPanel.innerHTML = html + '</ul>';
       columnsPanel.querySelector(".table-filter-panel-close").addEventListener("click", function () {
@@ -352,14 +430,17 @@
       columnsPanel.querySelector(".table-columns-reset").addEventListener("click", function (event) {
         // Rendering replaces the event target; do not mistake its bubbled click for click-away.
         event.stopPropagation();
-        columns.forEach(function (column, index) { setColumnVisible(index, column.initialVisible); });
+        columns.forEach(function (column, index) {
+          setColumnVisible(index, column.initialVisible);
+          column.frozen = column.locked;
+        });
         applyVisibility();
         applyFilter();
         renderColumnsPanel();
         columnsPanel.querySelector(".table-columns-reset").focus();
         positionPanel(columnsButton, columnsPanel);
       });
-      var checks = columnsPanel.querySelectorAll('input[type="checkbox"]');
+      var checks = columnsPanel.querySelectorAll('input[data-column-index]');
       Array.prototype.forEach.call(checks, function (check) {
         check.addEventListener("change", function () {
           var index = Number(check.getAttribute("data-column-index"));
@@ -367,6 +448,15 @@
           check.checked = columns[index].visible;
           applyVisibility();
           applyFilter();
+        });
+      });
+      Array.prototype.forEach.call(columnsPanel.querySelectorAll('input[data-freeze-index]'), function (check) {
+        check.addEventListener("change", function () {
+          var column = columns[Number(check.getAttribute("data-freeze-index"))];
+          column.frozen = column.locked || check.checked;
+          check.checked = column.frozen;
+          applyFrozenColumns();
+          saveState();
         });
       });
     }
@@ -413,6 +503,9 @@
         '<button type="button" class="table-filter-panel-close" aria-label="閉じる">×</button>';
       html += "</div>";
       html += '<div class="table-filter-panel-actions">';
+      html += '<button type="button" data-sort="asc" title="昇順" aria-label="昇順">昇順</button>' +
+        '<button type="button" data-sort="desc" title="降順" aria-label="降順">降順</button>' +
+        '<button type="button" data-sort="reset" title="ソート解除" aria-label="ソート解除">ソート解除</button>';
       html +=
         '<button type="button" class="table-filter-select-all">すべて選択</button>';
       html +=
@@ -461,6 +554,17 @@
       panel.hidden = false;
       openCol = colIndex;
       positionPanel(anchor);
+      Array.prototype.forEach.call(panel.querySelectorAll('[data-sort]'), function (button) {
+        var direction = button.getAttribute("data-sort");
+        button.setAttribute("aria-pressed", String(direction === "reset" ? !sortState :
+          !!(sortState && sortState.key === columns[colIndex].key && sortState.direction === direction)));
+        button.addEventListener("click", function () {
+          sortState = direction === "reset" ? null : { key: columns[colIndex].key, direction: direction };
+          applySort();
+          saveState();
+          closePanel(true);
+        });
+      });
 
       for (var t = 0; t < toggles.length; t++) {
         var expanded =
@@ -577,10 +681,25 @@
       }
     });
     window.addEventListener("scroll", repositionPanels, true);
-    window.addEventListener("resize", repositionPanels);
+    window.addEventListener("resize", function () { repositionPanels(); applyFrozenColumns(); });
+    if (window.ResizeObserver) {
+      var frozenUpdatePending = false;
+      var observer = new window.ResizeObserver(function () {
+        if (frozenUpdatePending) { return; }
+        frozenUpdatePending = true;
+        // Leave the observer delivery cycle before writing. Unchanged offsets cause no writes.
+        (window.requestAnimationFrame || window.setTimeout).call(window, function () {
+          frozenUpdatePending = false;
+          applyFrozenColumns();
+        });
+      });
+      observer.observe(table);
+      headers.forEach(function (header) { observer.observe(header); });
+    }
 
     restoreState();
     applyVisibility();
+    applySort();
     if (statusEl) { statusEl.setAttribute("aria-live", "polite"); }
     applyFilter();
   }

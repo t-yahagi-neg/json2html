@@ -56,6 +56,7 @@ function fixture(t, config = {}) {
       const cell = row.insertCell();
       if (value && typeof value === 'object') {
         cell.textContent = value.text || '';
+        if (value.html) cell.innerHTML = value.html;
         if (value.black) cell.className = 'cell-black';
         if (value.value !== undefined) cell.setAttribute('data-filter-value', value.value);
         if (value.label) cell.setAttribute('data-filter-label', value.label);
@@ -78,10 +79,13 @@ function fixture(t, config = {}) {
     };
   } });
   Object.defineProperty(document, 'readyState', { value: config.loading ? 'loading' : 'complete' });
+  const originalRows = [...table.tBodies[0].rows];
+  if (config.beforeInit) config.beforeInit({ window, document, table });
   window.eval(source);
   if (config.loading) document.dispatchEvent(new window.Event('DOMContentLoaded'));
   const $ = selector => document.querySelector(selector);
-  const checks = () => [...document.querySelectorAll('#table-columns-panel input')];
+  const checks = () => [...document.querySelectorAll('#table-columns-panel input[data-column-index]')];
+  const freezeChecks = () => [...document.querySelectorAll('#table-columns-panel input[data-freeze-index]')];
   function change(input, checked) {
     assert.ok(input, 'checkbox exists');
     input.checked = checked;
@@ -91,7 +95,7 @@ function fixture(t, config = {}) {
     if ($('#table-columns-panel').hidden) $('#table-columns-toggle').click();
   }
   return {
-    window, document, table, storage, $, change, checks, openColumns,
+    window, document, table, storage, $, change, checks, freezeChecks, openColumns, originalRows,
     visibleRows: () => [...table.tBodies[0].rows].map(r => !r.hidden),
     visibleColumns: () => [...table.tHead.rows[0].cells].map(c => !c.hidden),
     state: () => JSON.parse(storage.values().next().value),
@@ -103,6 +107,12 @@ function fixture(t, config = {}) {
       change(input, checked);
     },
     visibility(index, visible) { openColumns(); change(checks()[index], visible); },
+    freeze(index, frozen) { openColumns(); change(freezeChecks()[index], frozen); },
+    sort(index, direction) {
+      const button = table.tHead.rows[0].cells[index].querySelector('button');
+      if ($('#table-filter-panel').hidden || button.getAttribute('aria-expanded') !== 'true') button.click();
+      $(`#table-filter-panel [data-sort="${direction}"]`).click();
+    },
   };
 }
 
@@ -338,4 +348,237 @@ test('filter changes reuse cached cell values rather than rescanning table cells
   assert.equal(page.visibleRows().filter(Boolean).length, 250);
   page.filter(0, '0', false);
   assert.equal(page.visibleRows().filter(Boolean).length, 249);
+});
+
+test('text sort controls switch a single column, preserve row identity and reset original JSON order', t => {
+  const page = fixture(t, { rows: [['3', 'A', 'X'], ['1', 'B', 'Y'], ['2', 'A', 'Z']] });
+  const originalCells = page.originalRows.map(row => [...row.cells]);
+  page.table.tHead.rows[0].cells[1].querySelector('button').click();
+  assert.deepEqual([...page.document.querySelectorAll('[data-sort]')].map(b => b.textContent),
+    ['昇順', '降順', 'ソート解除']);
+  const order = () => [...page.table.tBodies[0].rows].map(r => page.originalRows.indexOf(r));
+  page.filter(1, 'B', false);
+  page.sort(0, 'asc');
+  assert.deepEqual(order(), [1, 2, 0]);
+  assert.deepEqual(page.visibleRows(), [false, true, true]);
+  page.filter(0, '2', false);
+  assert.deepEqual(page.visibleRows(), [false, false, true]);
+  page.sort(1, 'desc');
+  // Equal A values use original order, not the preceding sort order.
+  assert.deepEqual(order(), [1, 0, 2]);
+  assert.deepEqual([...page.table.tHead.rows[0].cells].map(c => c.getAttribute('aria-sort')),
+    ['none', 'descending', 'none']);
+  page.sort(2, 'reset');
+  assert.deepEqual(order(), [0, 1, 2]);
+  assert.deepEqual(page.visibleRows(), [true, false, false]);
+  assert.equal(page.state().sort, null);
+  page.originalRows.forEach((row, index) => assert.deepEqual([...row.cells], originalCells[index]));
+});
+
+test('sorting uses display labels for links/multiline/colors, numeric order, stable ties and empty last', t => {
+  const page = fixture(t, { rows: [
+    ['0', { html: '<a href="https://z.test">項目2</a>', value: 'url-z', label: '項目2' }, ''],
+    ['1', { html: '<div>項目</div><div>10</div>', value: 'raw-a', label: '項目10' }, ''],
+    ['2', { html: '<a href="https://a.test">項目2</a>', value: 'url-a', label: '項目2' }, ''],
+    ['3', { text: ' \n\t ' }, ''],
+    ['4', { black: true, label: '黒' }, ''],
+    ['5', { value: 'none', label: 'なし' }, ''],
+  ] });
+  const order = () => [...page.table.tBodies[0].rows].map(r => r.cells[0].textContent);
+  page.sort(1, 'asc');
+  assert.deepEqual(order(), ['5', '0', '2', '1', '4', '3']);
+  page.filter(1, 'url-z', false);
+  assert.equal(page.originalRows[0].hidden, true);
+  assert.equal(page.originalRows[2].hidden, false);
+  page.sort(1, 'desc');
+  assert.deepEqual(order(), ['4', '1', '0', '2', '5', '3']);
+  page.filter(1, 'black', false);
+  assert.equal(page.originalRows[4].hidden, true);
+  assert.ok(page.originalRows[4].cells[1].classList.contains('cell-black'));
+});
+
+test('missing metadata falls back to visible link/multiline text and whitespace empty values', t => {
+  const page = fixture(t, { rows: [
+    ['0', { html: '<div>Alpha</div><div><a href="https://z.test">2</a></div>' }, ''],
+    ['1', { html: '<a href="https://a.test">Alpha 10</a>' }, ''],
+    ['2', { html: '<br> \n ' }, ''],
+  ] });
+  page.sort(1, 'desc');
+  assert.deepEqual([...page.table.tBodies[0].rows].map(r => r.cells[0].textContent), ['1', '0', '2']);
+  page.filter(1, 'Alpha 2', false);
+  assert.equal(page.originalRows[0].hidden, true);
+  page.filter(1, '__empty__', false);
+  assert.equal(page.originalRows[2].hidden, true);
+});
+
+test('version1 adds sort/freezing, restores by key after reordering, and accepts old settings', t => {
+  const page = fixture(t);
+  page.visibility(2, true);
+  page.freeze(2, true);
+  page.filter(1, 'B', false);
+  page.sort(0, 'asc');
+  const saved = page.state();
+  assert.equal(saved.version, 1);
+  assert.deepEqual(saved.sort, { key: 'Header', direction: 'asc' });
+  assert.equal(saved.columns.notes.frozen, true);
+  const reload = fixture(t, { storage: page.storage,
+    columns: [defaults[0], defaults[2], defaults[1]],
+    rows: defaultRows.map(([a, b, c]) => [a, c, b]),
+  });
+  assert.equal(reload.table.tHead.rows[0].cells[1].classList.contains('is-frozen'), true);
+  assert.equal(reload.originalRows[1].hidden, true);
+  assert.deepEqual(reload.state().sort, saved.sort);
+  const old = fixture(t, { storage: new Map([[prefix + 'test-page', JSON.stringify({
+    version: 1, columns: { type: { visible: false, selected: { B: false } } },
+  })]]), policy: 'keep' });
+  assert.deepEqual(old.visibleColumns(), [true, false, false]);
+  assert.deepEqual(old.visibleRows(), [true, false, true]);
+  assert.equal(old.state().sort, null);
+  assert.deepEqual([...old.table.tHead.rows[0].cells].map(c => c.classList.contains('is-frozen')),
+    [true, false, false]);
+});
+
+test('incompatible or malformed sort settings cannot restore sort alone', t => {
+  for (const saved of [
+    { version: 99, sort: { key: 'Header', direction: 'asc' } },
+    { version: '1', sort: { key: 'Header', direction: 'asc' } },
+    { sort: { key: 'Header', direction: 'asc' } },
+    { version: 1, sort: { key: 'missing', direction: 'asc' } },
+    { version: 1, sort: { key: 'Header', direction: 'invalid' } },
+  ]) {
+    const page = fixture(t, { storage: new Map([[prefix + 'test-page', JSON.stringify(saved)]]),
+      rows: [['3', 'A', ''], ['1', 'B', ''], ['2', 'A', '']] });
+    assert.deepEqual([...page.table.tBodies[0].rows], page.originalRows);
+    assert.equal(page.state().sort, null);
+    page.sort(0, 'asc');
+    assert.equal(page.table.tBodies[0].rows[0], page.originalRows[1]);
+  }
+});
+
+test('noncontiguous frozen columns use only visible frozen widths; reset and resize update all cells', t => {
+  const widths = [80, 90, 100, 110];
+  const page = fixture(t, {
+    columns: [...defaults.map(c => ({ ...c, visible: true })), { key: 'extra', label: '追加' }],
+    rows: [['3', 'A', { black: true }, 'x'], ['1', 'B', 'Y', 'y'], ['2', 'A', 'Z', 'z']],
+    beforeInit({ table }) {
+      [...table.tHead.rows[0].cells].forEach((c, i) => {
+        c.getBoundingClientRect = () => ({ width: widths[i] });
+      });
+      for (const row of table.tBodies[0].rows) for (const cell of row.cells) {
+        cell.getBoundingClientRect = () => { throw new Error('body width must not be measured'); };
+      }
+    },
+  });
+  function layout(index, frozen, left) {
+    for (const row of page.table.rows) {
+      assert.equal(row.cells[index].classList.contains('is-frozen'), frozen);
+      assert.equal(row.cells[index].style.left, left);
+    }
+  }
+  page.freeze(2, true);
+  layout(0, true, '0px'); layout(1, false, ''); layout(2, true, '80px');
+  page.window.dispatchEvent(new page.window.Event('scroll'));
+  layout(2, true, '80px');
+  page.freeze(1, true);
+  layout(2, true, '170px');
+  page.visibility(1, false);
+  layout(1, false, ''); layout(2, true, '80px');
+  page.visibility(1, true);
+  layout(2, true, '170px');
+  page.freeze(1, false);
+  page.visibility(2, false);
+  layout(2, false, '');
+  page.visibility(2, true);
+  layout(2, true, '80px');
+  widths[0] = 120;
+  page.window.dispatchEvent(new page.window.Event('resize'));
+  layout(2, true, '120px');
+  page.freeze(0, false);
+  assert.equal(page.freezeChecks()[0].checked, true);
+  assert.equal(page.freezeChecks()[0].disabled, true);
+  layout(0, true, '0px');
+  page.sort(0, 'asc');
+  page.$('#table-filter-clear').click();
+  assert.deepEqual(page.state().sort, { key: 'Header', direction: 'asc' });
+  assert.equal(page.state().columns.notes.frozen, true);
+  page.openColumns();
+  page.$('.table-columns-reset').click();
+  layout(0, true, '0px'); layout(2, false, '');
+  assert.equal(page.freezeChecks()[2].checked, false);
+  assert.equal(page.state().columns.notes.frozen, false);
+  assert.deepEqual(page.state().sort, { key: 'Header', direction: 'asc' });
+  page.sort(0, 'reset');
+  assert.deepEqual([...page.table.tBodies[0].rows], page.originalRows);
+  assert.ok(page.originalRows[0].cells[2].classList.contains('cell-black'));
+});
+
+test('sort, reset and row filtering recompute widths when table auto-layout changes', t => {
+  let page;
+  page = fixture(t, {
+    rows: [['3', 'A', 'X'], ['1', 'B', 'Y'], ['2', 'A', 'Z']],
+    beforeInit({ table }) {
+      table.tHead.rows[0].cells[0].getBoundingClientRect = () => ({
+        width: table.tBodies[0].rows[0].cells[0].textContent === '1' ? 100 :
+          table.tBodies[0].rows[1].hidden ? 60 : 80,
+      });
+    },
+  });
+  page.freeze(1, true);
+  const left = () => page.originalRows[0].cells[1].style.left;
+  assert.equal(left(), '80px');
+  page.sort(0, 'asc');
+  assert.equal(left(), '100px');
+  page.sort(0, 'reset');
+  assert.equal(left(), '80px');
+  page.filter(1, 'B', false);
+  assert.equal(left(), '60px');
+  page.$('#table-filter-clear').click();
+  assert.equal(left(), '80px');
+});
+
+test('ResizeObserver batches header changes and unchanged layout produces no DOM mutations', async t => {
+  let notify;
+  const frames = [];
+  const observed = [];
+  let firstWidth = 80;
+  let secondWidth = 90;
+  let reads = 0;
+  const page = fixture(t, { beforeInit({ window, table }) {
+    window.requestAnimationFrame = callback => { frames.push(callback); return frames.length; };
+    window.ResizeObserver = class {
+      constructor(callback) { notify = callback; }
+      observe(target) { observed.push(target); }
+    };
+    [...table.tHead.rows[0].cells].forEach((cell, index) => {
+      cell.getBoundingClientRect = () => {
+        reads++;
+        return { width: index === 0 ? firstWidth : index === 1 ? secondWidth : 90 };
+      };
+    });
+  } });
+  page.freeze(1, true);
+  assert.deepEqual(observed, [page.table, ...page.table.tHead.rows[0].cells]);
+  const mutations = [];
+  const observer = new page.window.MutationObserver(records => mutations.push(...records));
+  observer.observe(page.table, { attributes: true, subtree: true });
+  const beforeReads = reads;
+  notify(); notify(); notify();
+  assert.equal(frames.length, 1);
+  assert.equal(reads, beforeReads, 'observer callback must defer layout reads/writes');
+  frames.shift()();
+  await Promise.resolve();
+  assert.equal(reads - beforeReads, 2, 'only visible frozen headers measured');
+  assert.equal(mutations.length, 0, 'unchanged layout must not feed observer loops');
+  firstWidth = 140;
+  secondWidth = 30; // Same total table width: only observing the table misses this redistribution.
+  assert.equal(firstWidth + secondWidth, 170);
+  notify(); frames.shift()();
+  await Promise.resolve();
+  assert.equal(page.originalRows[0].cells[1].style.left, '140px');
+  assert.ok(mutations.length > 0);
+  mutations.length = 0;
+  notify(); frames.shift()();
+  await Promise.resolve();
+  assert.equal(mutations.length, 0);
+  observer.disconnect();
 });

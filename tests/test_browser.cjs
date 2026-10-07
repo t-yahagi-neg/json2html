@@ -157,6 +157,73 @@ test('generated HTML works directly from disk', async (t) => {
       await page.screenshot({ path: path.join(fixture, 'columns.png'), fullPage: true });
       assert.deepEqual(errors, []);
     });
+    await t.test('single-column sort, reset, persistence and filter identity', async () => {
+      await reset();
+      const order = () => page.locator('tbody tr td:first-child').allTextContents();
+      async function sort(index, direction) {
+        await page.locator(`.table-filter-toggle[data-col-index="${index}"]`).click();
+        await page.locator(`[data-sort="${direction}"]`).click();
+      }
+      await sort(1, 'desc');
+      assert.deepEqual(await order(), ['2', '1', '3']);
+      await page.reload();
+      assert.deepEqual(await order(), ['2', '1', '3']);
+      await setColumn(page, 2, true);
+      await sort(2, 'desc');
+      assert.deepEqual(await order(), ['3', '2', '1']);
+      assert.equal(await page.locator('th[aria-sort="descending"]').count(), 1);
+      await filterX(page);
+      assert.equal(await visibleRows(page), 1);
+      await sort(2, 'reset');
+      assert.deepEqual(await order(), ['1', '2', '3']);
+    });
+
+    await t.test('frozen third column excludes hidden second column and restores', async () => {
+      await reset({columns: ['A', 'B', 'C', 'D'], rows: [
+        {A: '1', B: 'x', C: {type: 'color', color: 'black'}, D: 'long scrolling content '.repeat(40)},
+        {A: '2', B: 'y', C: 'v', D: 'long scrolling content '.repeat(40)},
+      ]});
+      await setColumn(page, 2, true);
+      await page.locator('#table-columns-toggle').click();
+      await page.locator('[data-freeze-index="2"]').check();
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('tbody tr').first().locator('td').nth(2).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(0, 0, 0)');
+      await page.locator('#data-table').evaluate(el => el.style.minWidth = '1500px');
+      await page.locator('.table-scroll').evaluate(el => el.scrollLeft = 500);
+      await page.waitForFunction(() => {
+        const cells = document.querySelectorAll('thead th');
+        return Math.abs(cells[2].getBoundingClientRect().x - cells[0].getBoundingClientRect().right) < 2;
+      });
+      await page.locator('.table-scroll').evaluate(el => el.scrollLeft = 0);
+      await setColumn(page, 1, false);
+      const offset = await page.locator('thead th').nth(2).evaluate(el => parseFloat(el.style.left));
+      const firstWidth = await page.locator('thead th').nth(0).evaluate(el => el.getBoundingClientRect().width);
+      assert.ok(Math.abs(offset - firstWidth) < 1);
+      await page.reload();
+      assert.equal(await page.locator('thead th').nth(2).evaluate(el => el.classList.contains('is-frozen')), true);
+      await page.locator('#data-table').evaluate(el => el.style.minWidth = '1500px');
+      await page.locator('.table-scroll').evaluate(el => el.scrollLeft = 200);
+      await page.waitForTimeout(100);
+      const cells = await page.locator('thead th').evaluateAll(els => els.map(el => ({x: el.getBoundingClientRect().x, w: el.getBoundingClientRect().width})));
+      assert.ok(Math.abs(cells[2].x - cells[0].x - cells[0].w) < 2);
+      await page.screenshot({path: path.join(fixture, 'frozen-desktop.png'), fullPage: true});
+      await page.setViewportSize({width: 390, height: 844});
+      await page.locator('#table-columns-toggle').click();
+      const panel = await page.locator('#table-columns-panel').boundingBox();
+      assert.ok(panel.x >= 0 && panel.x + panel.width <= 391);
+      await page.screenshot({path: path.join(fixture, 'frozen-mobile.png'), fullPage: true});
+      await page.setViewportSize({width: 1280, height: 800});
+    });
+
+    await t.test('breadcrumb links lead to ancestor pages', async () => {
+      await page.goto(url(path.join(root, '001')));
+      const links = page.locator('.breadcrumbs a');
+      assert.equal(await links.count(), 1);
+      assert.equal(await page.locator('.breadcrumbs [aria-current="page"]').textContent(), '001');
+      await links.first().click();
+      assert.equal(page.url(), url());
+      assert.deepEqual(errors, []);
+    });
     passed = true;
   } finally {
     await browser.close();
