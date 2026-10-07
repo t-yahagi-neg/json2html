@@ -355,7 +355,7 @@ test('text sort controls switch a single column, preserve row identity and reset
   const originalCells = page.originalRows.map(row => [...row.cells]);
   page.table.tHead.rows[0].cells[1].querySelector('button').click();
   assert.deepEqual([...page.document.querySelectorAll('[data-sort]')].map(b => b.textContent),
-    ['昇順', '降順', 'ソート解除']);
+    ['昇順', '降順', '逆順', 'ソート解除']);
   const order = () => [...page.table.tBodies[0].rows].map(r => page.originalRows.indexOf(r));
   page.filter(1, 'B', false);
   page.sort(0, 'asc');
@@ -395,6 +395,203 @@ test('sorting uses display labels for links/multiline/colors, numeric order, sta
   page.filter(1, 'black', false);
   assert.equal(page.originalRows[4].hidden, true);
   assert.ok(page.originalRows[4].cells[1].classList.contains('cell-black'));
+});
+
+// Nonmonotonic input makes reversal distinguishable from either sort direction.
+// Duplicate values and two blanks also expose stable-tie and empty-last mistakes.
+const reverseRows = [
+  ['0', '項目2', 'X'], ['1', '', 'Y'], ['2', '項目10', 'Z'],
+  ['3', '項目2', 'W'], ['4', '項目1', 'V'], ['5', '', 'U'],
+];
+const rowOrder = page => [...page.table.tBodies[0].rows].map(row => page.originalRows.indexOf(row));
+
+function assertSortControls(page, index, { sort = null, reversed = false } = {}) {
+  const toggle = page.table.tHead.rows[0].cells[index].querySelector('button');
+  if (page.$('#table-filter-panel').hidden || toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+  for (const direction of ['asc', 'desc', 'reverse', 'reset']) {
+    const button = page.$(`#table-filter-panel [data-sort="${direction}"]`);
+    assert.ok(button, `${direction} control exists`);
+    const pressed = direction === 'reverse' ? reversed : direction === 'reset' ? !sort && !reversed :
+      !reversed && !!(sort && sort.key === page.table.tHead.rows[0].cells[index].getAttribute('data-column-key') &&
+        sort.direction === direction);
+    assert.equal(button.getAttribute('aria-pressed'), String(pressed), `${direction} pressed state`);
+  }
+  assert.deepEqual([...page.table.tHead.rows[0].cells].map(header => header.getAttribute('aria-sort')),
+    [...page.table.tHead.rows[0].cells].map(header => !sort || header.getAttribute('data-column-key') !== sort.key ?
+      'none' : reversed ? 'other' : sort.direction === 'asc' ? 'ascending' : 'descending'));
+}
+
+test('reverse toggles the current DOM order including duplicates and blanks without sorting', t => {
+  const page = fixture(t, { rows: reverseRows });
+  const cells = page.originalRows.map(row => [...row.cells]);
+  assertSortControls(page, 1);
+  assert.equal(page.$('[data-sort="reverse"]').textContent, '逆順');
+  page.sort(1, 'reverse');
+  assert.deepEqual(rowOrder(page), [5, 4, 3, 2, 1, 0]);
+  assert.equal(page.state().sort, null);
+  assert.equal(page.state().reversed, true);
+  assertSortControls(page, 1, { reversed: true });
+  // Reversal is table-wide, even when invoked from a different column menu.
+  page.sort(0, 'reverse');
+  assert.deepEqual(rowOrder(page), [0, 1, 2, 3, 4, 5]);
+  assert.equal(page.state().reversed, false);
+  assertSortControls(page, 0);
+  // An externally changed DOM order must be reversed as-is, not reconstructed.
+  const current = [2, 0, 5, 3, 1, 4];
+  current.forEach(index => page.table.tBodies[0].append(page.originalRows[index]));
+  page.sort(0, 'reverse');
+  assert.deepEqual(rowOrder(page), [4, 1, 3, 5, 0, 2]);
+  page.originalRows.forEach((row, index) => assert.deepEqual([...row.cells], cells[index]));
+});
+
+test('reverse of asc/desc reverses stable ties and empty-last rows, then restores the sorted order', t => {
+  for (const direction of ['asc', 'desc']) {
+    const page = fixture(t, { rows: reverseRows });
+    const sort = { key: 'type', direction };
+    const ordered = direction === 'asc' ? [4, 0, 3, 2, 1, 5] : [2, 0, 3, 4, 1, 5];
+    page.sort(1, direction);
+    assert.deepEqual(rowOrder(page), ordered);
+    assertSortControls(page, 1, { sort });
+    page.sort(1, 'reverse');
+    assert.deepEqual(rowOrder(page), [...ordered].reverse());
+    assert.deepEqual(page.state().sort, sort, 'reverse retains the original comparator direction');
+    assert.equal(page.state().reversed, true);
+    assertSortControls(page, 1, { sort, reversed: true });
+    assertSortControls(page, 0, { sort, reversed: true });
+    page.sort(0, 'reverse');
+    assert.deepEqual(rowOrder(page), ordered);
+    assert.equal(page.state().reversed, false);
+    assertSortControls(page, 1, { sort });
+  }
+});
+
+test('reverse clicks never call Array.sort or construct a comparator after fixture initialization', t => {
+  for (const sorted of [false, true]) {
+    const page = fixture(t, { rows: reverseRows });
+    if (sorted) page.sort(1, 'asc');
+    assertSortControls(page, 1, { sort: sorted ? { key: 'type', direction: 'asc' } : null });
+    const before = rowOrder(page);
+    const originalSort = page.window.Array.prototype.sort;
+    const OriginalCollator = page.window.Intl.Collator;
+    let sortCalls = 0;
+    let comparatorCalls = 0;
+    page.window.Array.prototype.sort = function (...args) {
+      sortCalls++;
+      return originalSort.apply(this, args);
+    };
+    page.window.Intl.Collator = function (...args) {
+      comparatorCalls++;
+      return new OriginalCollator(...args);
+    };
+    try {
+      page.sort(1, 'reverse');
+      assert.deepEqual(rowOrder(page), [...before].reverse());
+      page.sort(1, 'reverse');
+      assert.deepEqual(rowOrder(page), before);
+      assert.equal(sortCalls, 0, 'reverse must not call sort, even to rebuild the menu');
+      assert.equal(comparatorCalls, 0, 'reverse must not reconstruct a comparator');
+    } finally {
+      page.window.Array.prototype.sort = originalSort;
+      page.window.Intl.Collator = OriginalCollator;
+    }
+  }
+});
+
+test('hidden rows reverse too; filters retain row identity and clearing does not undo reversal', t => {
+  const page = fixture(t, { rows: reverseRows });
+  page.filter(1, '項目2', false);
+  page.filter(0, '2', false);
+  const hidden = () => page.originalRows.map(row => row.hidden);
+  assert.deepEqual(hidden(), [true, false, true, true, false, false]);
+  page.sort(1, 'reverse');
+  assert.deepEqual(rowOrder(page), [5, 4, 3, 2, 1, 0]);
+  assert.deepEqual(hidden(), [true, false, true, true, false, false]);
+  page.filter(1, '__empty__', false);
+  assert.deepEqual(hidden(), [true, true, true, true, false, true]);
+  page.filter(1, '項目2', true);
+  assert.deepEqual(hidden(), [false, true, true, false, false, true]);
+  assert.deepEqual(rowOrder(page), [5, 4, 3, 2, 1, 0]);
+  page.$('#table-filter-clear').click();
+  assert.deepEqual(hidden(), [false, false, false, false, false, false]);
+  assert.deepEqual(rowOrder(page), [5, 4, 3, 2, 1, 0]);
+  assert.equal(page.state().sort, null);
+  assert.equal(page.state().reversed, true);
+  assertSortControls(page, 1, { reversed: true });
+});
+
+test('version1 persists reversal and reload reconstructs original sort then reverses all rows', t => {
+  for (const direction of [null, 'asc', 'desc']) {
+    const page = fixture(t, { rows: reverseRows });
+    page.filter(1, '項目2', false);
+    if (direction) page.sort(1, direction);
+    page.sort(1, 'reverse');
+    const saved = page.state();
+    const sort = direction ? { key: 'type', direction } : null;
+    assert.equal(saved.version, 1);
+    assert.equal(saved.reversed, true);
+    assert.deepEqual(saved.sort, sort);
+    const reload = fixture(t, { rows: reverseRows, storage: page.storage });
+    assert.deepEqual(rowOrder(reload), rowOrder(page));
+    assert.deepEqual(reload.originalRows.map(row => row.hidden), [true, false, false, true, false, false]);
+    assert.equal(reload.state().reversed, true);
+    assert.deepEqual(reload.state().sort, sort);
+    assertSortControls(reload, 1, { sort, reversed: true });
+    reload.sort(0, 'reverse');
+    assert.deepEqual(rowOrder(reload), direction === 'asc' ? [4, 0, 3, 2, 1, 5] :
+      direction === 'desc' ? [2, 0, 3, 4, 1, 5] : [0, 1, 2, 3, 4, 5]);
+    assert.equal(reload.state().reversed, false);
+  }
+});
+
+test('old version1 states default reversal to false and only literal true restores reversal', t => {
+  for (const flag of [undefined, false, true, 'true', 'false', 1, 0, null, {}, []]) {
+    const sort = { key: 'type', direction: 'asc' };
+    const saved = { version: 1, sort, columns: {} };
+    if (flag !== undefined) saved.reversed = flag;
+    const page = fixture(t, { rows: reverseRows,
+      storage: new Map([[prefix + 'test-page', JSON.stringify(saved)]]) });
+    const reversed = flag === true;
+    assert.deepEqual(rowOrder(page), reversed ? [5, 1, 2, 3, 0, 4] : [4, 0, 3, 2, 1, 5]);
+    assert.equal(page.state().reversed, reversed, `normalized flag ${JSON.stringify(flag)}`);
+    assertSortControls(page, 1, { sort, reversed });
+  }
+  for (const version of [undefined, '1', 0, 2, 99, null]) {
+    const page = fixture(t, { rows: reverseRows, storage: new Map([[prefix + 'test-page', JSON.stringify({
+      version, reversed: true, sort: { key: 'type', direction: 'desc' }, columns: {},
+    })]]) });
+    assert.deepEqual(rowOrder(page), [0, 1, 2, 3, 4, 5]);
+    assert.equal(page.state().sort, null);
+    assert.equal(page.state().reversed, false);
+    assertSortControls(page, 1);
+  }
+});
+
+test('reset and new asc/desc sort clear reversal, including reselecting the same sort', t => {
+  for (const initial of [null, 'asc', 'desc']) {
+    for (const next of ['reset', 'asc', 'desc']) {
+      const page = fixture(t, { rows: reverseRows });
+      if (initial) page.sort(1, initial);
+      page.sort(1, 'reverse');
+      page.sort(1, next);
+      const sort = next === 'reset' ? null : { key: 'type', direction: next };
+      const expected = next === 'asc' ? [4, 0, 3, 2, 1, 5] :
+        next === 'desc' ? [2, 0, 3, 4, 1, 5] : [0, 1, 2, 3, 4, 5];
+      assert.deepEqual(rowOrder(page), expected);
+      assert.equal(page.state().reversed, false);
+      assert.deepEqual(page.state().sort, sort);
+      assertSortControls(page, 1, { sort });
+      const reload = fixture(t, { rows: reverseRows, storage: page.storage });
+      assert.deepEqual(rowOrder(reload), expected);
+      assert.equal(reload.state().reversed, false);
+    }
+  }
+  const page = fixture(t, { rows: reverseRows });
+  page.sort(1, 'asc');
+  page.sort(1, 'reverse');
+  page.sort(0, 'desc');
+  assert.deepEqual(rowOrder(page), [5, 4, 3, 2, 1, 0]);
+  assertSortControls(page, 0, { sort: { key: 'Header', direction: 'desc' } });
+  assert.equal(page.state().reversed, false);
 });
 
 test('missing metadata falls back to visible link/multiline text and whitespace empty values', t => {

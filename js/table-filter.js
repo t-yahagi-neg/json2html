@@ -67,14 +67,16 @@
     var openCol = null;
     var filterAnchor = null;
     var sortState = null;
+    var reversed = false;
 
     function restoreState() {
       var saved;
       try {
         saved = JSON.parse(window.localStorage.getItem(storageKey));
       } catch (_) { /* Storage may be blocked, unavailable, or corrupt. */ }
-      // One version gate covers visibility, filtering, freezing AND sorting.
+      // One version gate covers visibility, filtering, freezing, sorting AND reversal.
       if (!saved || saved.version !== 1) { saved = null; }
+      reversed = !!(saved && saved.reversed === true);
       var savedColumns = saved && saved.columns;
       columns.forEach(function (column, index) {
         var previous = savedColumns && Object.prototype.hasOwnProperty.call(savedColumns, column.key)
@@ -106,7 +108,9 @@
         };
       });
       try {
-        window.localStorage.setItem(storageKey, JSON.stringify({ version: 1, columns: savedColumns, sort: sortState }));
+        window.localStorage.setItem(storageKey, JSON.stringify({
+          version: 1, columns: savedColumns, sort: sortState, reversed: reversed
+        }));
       } catch (_) { /* Filtering must remain usable without localStorage. */ }
     }
 
@@ -157,10 +161,24 @@
         });
       }
       ordered.forEach(function (item) { tbody.appendChild(item.row); });
+      updateSortHeaders();
+      applyFrozenColumns();
+    }
+
+    function updateSortHeaders() {
+      var index = sortState ? columns.findIndex(function (column) { return column.key === sortState.key; }) : -1;
       headers.forEach(function (header, ordinal) {
         header.setAttribute("aria-sort", ordinal === index ?
-          (sortState.direction === "asc" ? "ascending" : "descending") : "none");
+          (reversed ? "other" : (sortState.direction === "asc" ? "ascending" : "descending")) : "none");
       });
+    }
+
+    function reverseCurrentRows() {
+      // Include hidden rows and move the same nodes; keep original cache ordinals intact.
+      Array.prototype.slice.call(tbody.rows).reverse().forEach(function (row) {
+        tbody.appendChild(row);
+      });
+      updateSortHeaders();
       applyFrozenColumns();
     }
 
@@ -505,6 +523,7 @@
       html += '<div class="table-filter-panel-actions">';
       html += '<button type="button" data-sort="asc" title="昇順" aria-label="昇順">昇順</button>' +
         '<button type="button" data-sort="desc" title="降順" aria-label="降順">降順</button>' +
+        '<button type="button" data-sort="reverse" title="非表示行も含め、現在の行順を逆順にします。もう一度押すと元に戻ります" aria-label="逆順">逆順</button>' +
         '<button type="button" data-sort="reset" title="ソート解除" aria-label="ソート解除">ソート解除</button>';
       html +=
         '<button type="button" class="table-filter-select-all">すべて選択</button>';
@@ -556,11 +575,18 @@
       positionPanel(anchor);
       Array.prototype.forEach.call(panel.querySelectorAll('[data-sort]'), function (button) {
         var direction = button.getAttribute("data-sort");
-        button.setAttribute("aria-pressed", String(direction === "reset" ? !sortState :
-          !!(sortState && sortState.key === columns[colIndex].key && sortState.direction === direction)));
+        button.setAttribute("aria-pressed", String(direction === "reverse" ? reversed :
+          direction === "reset" ? !sortState && !reversed :
+          !!(!reversed && sortState && sortState.key === columns[colIndex].key && sortState.direction === direction)));
         button.addEventListener("click", function () {
-          sortState = direction === "reset" ? null : { key: columns[colIndex].key, direction: direction };
-          applySort();
+          if (direction === "reverse") {
+            reversed = !reversed;
+            reverseCurrentRows();
+          } else {
+            reversed = false;
+            sortState = direction === "reset" ? null : { key: columns[colIndex].key, direction: direction };
+            applySort();
+          }
           saveState();
           closePanel(true);
         });
@@ -700,6 +726,7 @@
     restoreState();
     applyVisibility();
     applySort();
+    if (reversed) { reverseCurrentRows(); }
     if (statusEl) { statusEl.setAttribute("aria-live", "polite"); }
     applyFilter();
   }

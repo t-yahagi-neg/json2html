@@ -178,6 +178,48 @@ test('generated HTML works directly from disk', async (t) => {
       assert.deepEqual(await order(), ['1', '2', '3']);
     });
 
+    await t.test('reverse preserves current row order without sorting and survives reload', async () => {
+      await reset({rows: [
+        {A: '3', B: 'x', C: 'u'}, {A: '1', B: 'y', C: 'v'},
+        {A: '4', B: 'x', C: 'w'}, {A: '2', B: '', C: ''},
+      ]});
+      const order = () => page.locator('tbody tr td:first-child').allTextContents();
+      async function action(direction) {
+        await page.locator('.table-filter-toggle[data-col-index="1"]').click();
+        await page.locator(`#table-filter-panel [data-sort="${direction}"]`).click();
+      }
+      await action('reverse');
+      assert.deepEqual(await order(), ['2', '4', '1', '3']);
+      await page.reload();
+      assert.deepEqual(await order(), ['2', '4', '1', '3']);
+      await action('reverse');
+      assert.deepEqual(await order(), ['3', '1', '4', '2']);
+      await action('asc');
+      assert.deepEqual(await order(), ['3', '4', '1', '2']);
+      await action('reverse');
+      assert.deepEqual(await order(), ['2', '1', '4', '3']);
+      assert.equal(await page.locator('th[aria-sort="other"]').count(), 1);
+      await page.reload();
+      assert.deepEqual(await order(), ['2', '1', '4', '3']);
+      await filterX(page);
+      assert.deepEqual(await page.locator('tbody tr:not([hidden]) td:first-child').allTextContents(), ['2', '1']);
+      await page.locator('#table-filter-clear').click();
+      assert.deepEqual(await order(), ['2', '1', '4', '3']);
+      await page.setViewportSize({width: 390, height: 844});
+      await page.locator('.table-filter-toggle[data-col-index="1"]').click();
+      const button = page.locator('#table-filter-panel [data-sort="reverse"]');
+      assert.equal(await button.textContent(), '逆順');
+      assert.equal(await button.getAttribute('aria-pressed'), 'true');
+      const bounds = await button.boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+      await page.screenshot({path: path.join(fixture, 'reverse-mobile.png'), fullPage: true});
+      await page.keyboard.press('Escape');
+      await page.setViewportSize({width: 1280, height: 800});
+      await action('reset');
+      assert.deepEqual(await order(), ['3', '1', '4', '2']);
+      assert.equal(await page.locator('th[aria-sort="other"]').count(), 0);
+    });
+
     await t.test('frozen third column excludes hidden second column and restores', async () => {
       await reset({columns: ['A', 'B', 'C', 'D'], rows: [
         {A: '1', B: 'x', C: {type: 'color', color: 'black'}, D: 'long scrolling content '.repeat(40)},
