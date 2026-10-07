@@ -1,6 +1,6 @@
 # json2html
 
-階層メニュー・表示設定・ピン留めを試せる8ページの検証データを同梱しています。構成・確認手順は [VALIDATION_DATA.md](VALIDATION_DATA.md) を参照してください。
+ローカルの動作確認用ページと生成物はGit管理対象外です。自動テストと、その実行に必要な`tests/fixtures`は管理対象に残しています。以下のディレクトリ構成にあるデータ・HTMLは利用時の配置例です。
 
 `generate.py [ROOT]`で配下の`table.json`を再帰的に探し、各ページの`menu.json`・`menu.html`・`index.html`を一括生成するPython検証ツールです。`ROOT`の省略時は、スクリプトの配置場所ではなく実行時のカレントディレクトリが対象です。`add_empty_row.py`では、現在の列定義に対応した空データ行を`table.json`へ追加できます。
 

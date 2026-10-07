@@ -1,0 +1,19 @@
+# Local validation pages and generated output (keep automated tests/fixtures).
+/001/
+/002/
+/003/
+/pins/
+/table.json
+/json2html.config.json
+/index.html
+/menu.html
+/menu.json
+/VALIDATION_DATA.md
+/.vscode/
+__pycache__/
+*.py[cod]
+.DS_Store
+.pytest_cache/
+node_modules/
+playwright-report/
+test-results/
