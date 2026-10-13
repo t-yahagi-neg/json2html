@@ -257,6 +257,53 @@ test('generated HTML works directly from disk', async (t) => {
       await page.setViewportSize({width: 1280, height: 800});
     });
 
+    await t.test('multiline links work in first, middle and last columns', async () => {
+      const targetUrl = 'https://example.test/multiline-target';
+      await context.route(targetUrl, route => route.fulfill({
+        contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset="utf-8"><title>リンク検証</title>',
+      }));
+      const multiline = {type: 'multiline', lines: ['説明', '', {
+        type: 'link', text: '検証ページ', url: targetUrl,
+      }]};
+      await reset({column_options: {}, rows: [
+        {A: multiline, B: multiline, C: multiline},
+        {A: 'second', B: 'other', C: 'last'},
+      ]});
+      assert.equal(await page.locator('.data-messages').count(), 0);
+      assert.equal(await page.locator('tbody tr').first().locator('a').count(), 3);
+      assert.equal(await page.locator('tbody tr').first().locator('.multiline-empty-line').count(), 3);
+      async function clickLink(index) {
+        const popupPromise = page.waitForEvent('popup');
+        await page.locator('tbody tr').first().locator('td').nth(index).getByRole('link', {name: '検証ページ'}).click();
+        const popup = await popupPromise;
+        await popup.waitForURL(targetUrl);
+        assert.equal(await popup.title(), 'リンク検証');
+        await popup.close();
+      }
+      for (let index = 0; index < 3; index++) {
+        await clickLink(index);
+      }
+      await setColumn(page, 1, false);
+      await setColumn(page, 1, true);
+      await clickLink(1);
+      await page.locator('#table-columns-toggle').click();
+      await page.locator('[data-freeze-index="1"]').check();
+      await page.keyboard.press('Escape');
+      await page.locator('#data-table').evaluate(el => el.style.minWidth = '1500px');
+      await page.locator('.table-scroll').evaluate(el => el.scrollLeft = 300);
+      await clickLink(0);
+      await clickLink(1);
+      await page.locator('.table-scroll').evaluate(el => el.scrollLeft = 0);
+      await page.locator('.table-filter-toggle[data-col-index="1"]').click();
+      await page.locator('#table-filter-panel input[data-filter-value="other"]').uncheck();
+      await page.keyboard.press('Escape');
+      assert.equal(await visibleRows(page), 1);
+      await page.reload();
+      assert.equal(await visibleRows(page), 1);
+      assert.equal(await page.locator('tbody tr:not([hidden]) td').nth(1).locator('a').count(), 1);
+      await context.unroute(targetUrl);
+    });
+
     await t.test('breadcrumb links lead to ancestor pages', async () => {
       await page.goto(url(path.join(root, '001')));
       const links = page.locator('.breadcrumbs a');

@@ -171,7 +171,6 @@ def render_multiline_line(
     value: Any,
     context: str,
     warnings: list[str],
-    allow_links: bool,
 ) -> str:
     if isinstance(value, str):
         if value == "":
@@ -179,11 +178,6 @@ def render_multiline_line(
         return f'<div class="multiline-line">{html_escape(value)}</div>'
 
     if isinstance(value, dict) and value.get("type") == "link":
-        if not allow_links:
-            text = fallback_text(value)
-            if text == "":
-                return '<div class="multiline-line multiline-empty-line"><br></div>'
-            return f'<div class="multiline-line">{html_escape(text)}</div>'
         rendered, is_link = render_link(value, context, warnings)
         if is_link:
             return f'<div class="multiline-line multiline-link-line">{rendered}</div>'
@@ -256,7 +250,6 @@ def render_multiline_cell(
     row_number: int,
     column_name: str,
     warnings: list[str],
-    is_last_column: bool,
 ) -> str:
     lines = value.get("lines")
     context = f"table.json {row_number}行目相当 {column_name}列"
@@ -270,18 +263,11 @@ def render_multiline_cell(
             filter_label=FILTER_EMPTY_LABEL,
         )
 
-    if not is_last_column:
-        warnings.append(
-            f"{context}：multilineは最後の列だけで使用できます。"
-            "各行を通常文字列として表示し、リンクは生成しませんでした。"
-        )
-
     rendered_lines = [
         render_multiline_line(
             line,
             f"{context} {line_number}番目の行",
             warnings,
-            allow_links=is_last_column,
         )
         for line_number, line in enumerate(lines, start=1)
     ]
@@ -301,7 +287,6 @@ def render_table_cell(
     row_number: int,
     column_name: str,
     warnings: list[str],
-    is_last_column: bool,
 ) -> str:
     context = f"table.json {row_number}行目相当 {column_name}列"
     if isinstance(value, str):
@@ -354,7 +339,6 @@ def render_table_cell(
             row_number,
             column_name,
             warnings,
-            is_last_column,
         )
 
     warnings.append(
@@ -420,7 +404,6 @@ def build_index(
     header_html = "\n".join(header_cells)
 
     rendered_rows: list[str] = []
-    last_index = len(columns) - 1
     for row_number, row in enumerate(rows, start=1):
         for key in row:
             if key not in column_set:
@@ -434,9 +417,8 @@ def build_index(
                 row_number,
                 column,
                 warnings,
-                index == last_index,
             )
-            for index, column in enumerate(columns)
+            for column in columns
         ]
         for index, column in enumerate(columns):
             body_align = column_options.get(column, {}).get(

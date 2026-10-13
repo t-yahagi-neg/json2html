@@ -40,7 +40,7 @@
           "説明",
           {
             "type": "link",
-            "text": "リンクにしない",
+            "text": "最終列以外のリンク",
             "url": "https://example.com/"
           }
         ]

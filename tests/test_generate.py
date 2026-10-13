@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -141,15 +142,133 @@ class GenerateTests(unittest.TestCase):
             self.load_fixture("menu_warning.json")
         )
 
-        self.assertGreaterEqual(len(table_warnings), 7)
+        self.assertEqual(6, len(table_warnings))
         self.assertEqual(4, len(menu_warnings))
         self.assertIn("未定義の列", index)
         self.assertIn("未対応の形式", index)
-        self.assertIn("最後の列だけ", index)
+        self.assertNotIn("最後の列だけ", index)
+        self.assertIn(
+            '<a href="https://example.com/" target="_blank" '
+            'rel="noopener noreferrer">最終列以外のリンク</a>',
+            index,
+        )
         self.assertIn("multiline.lines内", index)
         self.assertIn("table.json読み込み時の警告", index)
         self.assertIn("menu.json読み込み時の警告", menu)
         self.assertNotIn('href="ftp://', menu)
+
+    def test_multiline_links_are_identical_in_every_column(self) -> None:
+        columns = ["first", "middle", "last"]
+        cell = {
+            "type": "multiline",
+            "lines": [
+                "説明",
+                "",
+                {"type": "link", "text": "リンク", "url": "https://example.com/"},
+                "",
+            ],
+        }
+        document, warnings = generate.build_index(
+            {"columns": columns, "rows": [dict.fromkeys(columns, cell)]}
+        )
+        self.assertEqual([], warnings)
+        cells = re.findall(r"<td\b.*?</td>", document, re.DOTALL)
+        self.assertEqual(3, len(cells))
+        self.assertEqual([cells[0]] * 3, cells)
+        for rendered in cells:
+            self.assertIn('class="multiline-cell"', rendered)
+            self.assertEqual(2, rendered.count("multiline-empty-line"))
+            self.assertIn('data-filter-value="説明 / リンク"', rendered)
+            self.assertIn('data-filter-label="説明 / リンク"', rendered)
+            self.assertIn(
+                '<div class="multiline-line multiline-link-line">'
+                '<a href="https://example.com/" target="_blank" '
+                'rel="noopener noreferrer">リンク</a></div>',
+                rendered,
+            )
+
+    def test_multiline_links_escape_text_and_urls_in_every_column(self) -> None:
+        for column in ("first", "middle", "last"):
+            with self.subTest(column=column):
+                document, warnings = generate.build_index(
+                    {
+                        "columns": ["first", "middle", "last"],
+                        "rows": [
+                            {
+                                column: {
+                                    "type": "multiline",
+                                    "lines": [
+                                        {
+                                            "type": "link",
+                                            "text": '<b>&"link"</b>',
+                                            "url": 'https://example.com/?a=1&b="<value>"',
+                                        }
+                                    ],
+                                }
+                            }
+                        ],
+                    }
+                )
+                self.assertEqual([], warnings)
+                self.assertIn(
+                    '<a href="https://example.com/?a=1&amp;b=&quot;&lt;value&gt;&quot;" '
+                    'target="_blank" rel="noopener noreferrer">'
+                    "&lt;b&gt;&amp;&quot;link&quot;&lt;/b&gt;</a>",
+                    document,
+                )
+                self.assertNotIn("<b>", document)
+                self.assertIn(
+                    'data-filter-value="&lt;b&gt;&amp;&quot;link&quot;&lt;/b&gt;"',
+                    document,
+                )
+                self.assertIn(
+                    'data-filter-label="&lt;b&gt;&amp;&quot;link&quot;&lt;/b&gt;"',
+                    document,
+                )
+
+    def test_multiline_invalid_urls_fall_back_in_every_column(self) -> None:
+        for column in ("first", "middle", "last"):
+            for url, warning in (
+                ("javascript:alert(1)", "未対応の形式"),
+                ("ftp://example.com/", "未対応の形式"),
+                ("./relative.html", "未対応の形式"),
+                ("", "URLが空"),
+                (None, "urlが文字列ではない"),
+            ):
+                with self.subTest(column=column, url=url):
+                    document, warnings = generate.build_index(
+                        {
+                            "columns": ["first", "middle", "last"],
+                            "rows": [
+                                {
+                                    column: {
+                                        "type": "multiline",
+                                        "lines": [
+                                            {
+                                                "type": "link",
+                                                "text": "<unsafe>&",
+                                                "url": url,
+                                            }
+                                        ],
+                                    }
+                                }
+                            ],
+                        }
+                    )
+                    self.assertEqual(1, len(warnings))
+                    self.assertIn(f"{column}列 1番目の行", warnings[0])
+                    self.assertIn(warning, warnings[0])
+                    rendered = re.findall(r"<td\b.*?</td>", document, re.DOTALL)[
+                        ["first", "middle", "last"].index(column)
+                    ]
+                    self.assertNotIn("<a ", rendered)
+                    self.assertNotIn("multiline-link-line", rendered)
+                    self.assertIn(
+                        '<div class="multiline-line">&lt;unsafe&gt;&amp;</div>',
+                        rendered,
+                    )
+                    self.assertIn('data-filter-value="&lt;unsafe&gt;&amp;"', rendered)
+                    self.assertIn('data-filter-label="&lt;unsafe&gt;&amp;"', rendered)
 
     def test_hidden_warnings_are_still_collected(self) -> None:
         table = self.load_fixture("table_warning.json")
