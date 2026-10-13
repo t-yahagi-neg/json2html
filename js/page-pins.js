@@ -101,10 +101,12 @@
     // All clients must load the exact same URL, including under file://.
     storeURL.search = '';
     storeURL.hash = '';
-    const excluded = new Set(Array.isArray(config.exclude_ids) ? config.exclude_ids : []);
+    // Exclusions belong to the dedicated hub's fixed parent/self links only.
+    // Ordinary menus show every saved known pin, even across menu sections.
+    const excluded = new Set(config.hub && Array.isArray(config.exclude_ids) ? config.exclude_ids : []);
     if (config.hub && typeof config.current_id === 'string') excluded.add(config.current_id);
     const canToggle = config.role === 'page' && entries.has(config.current_id);
-    const list = config.role === 'menu' && config.hub ? document.getElementById('pin-list') : null;
+    const list = config.role === 'menu' ? document.getElementById('pin-list') : null;
     const empty = list ? document.getElementById('pin-empty') : null;
     let ids = [];
     let ready = false;
@@ -158,7 +160,7 @@
       });
       if (empty) {
         empty.hidden = ordered.length > 0 || !ready;
-        empty.textContent = ready ? 'ピン留めしたページはありません。' : '';
+        empty.textContent = ready ? 'ピン留めはありません。' : '';
       }
     }
 

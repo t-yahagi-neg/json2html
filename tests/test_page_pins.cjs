@@ -553,8 +553,8 @@ test('titles are plain text, malicious canonical URLs/IDs rejected, encoded file
   assert.match(c.links()[0].href, /my%20folder\/%23file.html$/);
 });
 
-test('unknown page IDs and menu roles cannot toggle; nonhub menu does not populate pin list', t => {
-  for (const config of [{ current_id: 'missing' }, { hub: true, current_id: 'missing' }, { role: 'menu', hub: false }, { role: 'menu', hub: true, current_id: '001/index.html' }]) {
+test('unknown page IDs cannot toggle or populate pin list regardless of hub flag', t => {
+  for (const config of [{ current_id: 'missing' }, { hub: true, current_id: 'missing' }]) {
     const c = client(t, { config });
     c.load(); c.reply(['001/index.html']);
     assert.equal(c.button.disabled, true);
@@ -562,6 +562,101 @@ test('unknown page IDs and menu roles cannot toggle; nonhub menu does not popula
     assert.equal(c.sent.length, 1);
     assert.equal(c.links().length, 0);
   }
+});
+
+test('menu roles cannot toggle; only dedicated hubs exclude their current page', t => {
+  for (const hub of [false, true]) {
+    const c = client(t, { config: { role: 'menu', hub, current_id: '001/index.html' } });
+    c.load(); c.reply(['001/index.html']);
+    assert.equal(c.button.disabled, true);
+    c.button.click();
+    assert.equal(c.sent.length, 1);
+    assert.equal(c.links().length, hub ? 0 : 1);
+  }
+});
+
+test('ordinary menus show saved ROOT/current/hub pins with hints without touching normal menu', t => {
+  const root = { id: 'index.html', title: 'ROOT', url: '../index.html' };
+  const hub = { id: 'pins/index.html', title: 'ハブ', url: '../pins/index.html' };
+  const catalog = [root, ...entries.slice(0, 3), hub];
+  const body = '<nav><h2>ピン留め</h2><ul id="pin-list"></ul><p id="pin-empty"></p>' +
+    '<h2>メニュー</h2><ul id="normal-menu"><li><a href="../index.html">ROOT</a></li>' +
+    '<li><a href="../pins/index.html">ハブ</a></li><li><a href="../001/index.html">ページ1</a></li></ul></nav>';
+  for (const current_id of ['001/index.html', 'index.html']) {
+    const c = client(t, { body, config: {
+      role: 'menu', hub: false, current_id, entries: catalog,
+      exclude_ids: [root.id, hub.id, current_id],
+      order: ['003/index.html', hub.id, 'missing', '002/index.html', hub.id],
+    } });
+    const normal = c.$('#normal-menu');
+    const normalHTML = normal.outerHTML;
+    const normalLinks = [...normal.querySelectorAll('a')];
+    const observer = new c.w.MutationObserver(() => {});
+    observer.observe(normal, { childList: true, attributes: true, characterData: true, subtree: true });
+    c.load();
+    c.reply([root.id, '001/index.html', hub.id, '003/index.html', root.id, 'deleted']);
+    assert.deepEqual(c.links().map(a => a.textContent), ['ページ3', 'ハブ', 'ROOT', 'ページ1']);
+    assert.deepEqual(c.links().map(a => a.getAttribute('href')), ['../003/index.html', hub.url, root.url, '../001/index.html']);
+    assert.ok(c.links().every(a => a.target === '_top'));
+    assert.equal(c.$('#pin-list button'), null);
+    assert.equal(normal.outerHTML, normalHTML);
+    assert.deepEqual([...normal.querySelectorAll('a')], normalLinks);
+    assert.equal(observer.takeRecords().length, 0);
+    assert.deepEqual([...c.w.document.querySelectorAll('nav > h2')].map(h => h.textContent), ['ピン留め', 'メニュー']);
+    assert.equal(c.$('nav').firstElementChild.nextElementSibling, c.$('#pin-list'));
+    assertQuiet(c);
+    observer.disconnect();
+  }
+});
+
+test('ordinary menu refreshes after page unpin and never writes shared membership', t => {
+  const storage = new Map();
+  const { c, s } = bridge(t, { config: {
+    role: 'menu', hub: false, exclude_ids: ['index.html', '001/index.html'],
+  }, store: { storage, seed: state(['index.html', '001/index.html', 'deleted']) } });
+  const page = bridge(t, { store: { storage } });
+  assert.deepEqual(c.links().map(a => a.textContent), ['ハブ', 'ページ1']);
+  const remaining = c.links()[0];
+  c.button.click();
+  page.c.button.click();
+  c.w.dispatchEvent(new c.w.Event('json2html:pins-refresh'));
+  assert.deepEqual(c.links().map(a => a.textContent), ['ハブ']);
+  assert.equal(c.links()[0], remaining);
+  s.seed({ 'index.html': { version: 1, pinned: false, order: 10 } });
+  s.storageEvent();
+  assert.equal(c.links().length, 0);
+  assert.equal(c.$('#pin-empty').hidden, false);
+  assert.equal(c.$('#pin-empty').textContent, 'ピン留めはありません。');
+  assert.equal(s.writes.length, 0);
+  assert.ok(c.sent.every(({ data }) => data.type === 'get'));
+  assert.deepEqual(page.s.writes, [page.s.itemKey('001/index.html')]);
+  assertQuiet(c);
+});
+
+test('ordinary menu recovers from asynchronous errors without replacing focused anchors', t => {
+  const c = client(t, { config: { role: 'menu', hub: false, exclude_ids: ['001/index.html'] } });
+  c.load(); c.reply(['001/index.html']);
+  const link = c.links()[0];
+  link.focus();
+  const observer = new c.w.MutationObserver(() => {});
+  observer.observe(c.$('#pin-list'), { childList: true, subtree: true });
+  for (const failure of ['read', 'timeout', 'iframe', 'corrupt']) {
+    c.w.dispatchEvent(new c.w.Event('focus'));
+    if (failure === 'timeout') c.timeout();
+    else if (failure === 'iframe') c.frame.dispatchEvent(new c.w.Event('error'));
+    else c.reply(['001/index.html'], failure === 'read' ? { error: 'read' } : { recovered: true });
+    assertWarning(c, /読み込めません|応答がありません|壊れている/);
+    c.w.dispatchEvent(new c.w.Event('pageshow'));
+    assert.equal(c.$('#page-pin-status').hidden, false, 'retry keeps the warning until the reply');
+    c.reply(['001/index.html']);
+    assertQuiet(c);
+    assert.equal(c.links()[0], link);
+    assert.equal(c.w.document.activeElement, link);
+    assert.equal(observer.takeRecords().length, 0);
+  }
+  assert.ok(c.sent.every(({ data }) => data.type === 'get'));
+  assert.equal(c.button.disabled, true);
+  observer.disconnect();
 });
 
 test('exclude_ids never blocks normal/ROOT/hub page toggles or changes their saved canonical IDs', t => {

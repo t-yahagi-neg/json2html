@@ -146,6 +146,12 @@ body {
   font-size: 1.1rem;
 }
 
+.menu > h2:not(:first-child) {
+  margin-top: 1.25rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid #c5ccd8;
+}
+
 .menu-list {
   display: flex;
   flex-direction: column;

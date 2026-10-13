@@ -655,11 +655,13 @@ def build_menu(
 
     title = html_escape(menu_title)
     pin_list = ""
-    if pin_data is not None and pin_data["hub"]:
-        pin_list = """
-    <h2>ピン留めしたページ</h2>
+    pin_status = ""
+    if pin_data is not None:
+        pin_list = """    <h2>ピン留め</h2>
     <ul id="pin-list" class="menu-list"></ul>
-    <p id="pin-empty">ピン留めしたページはありません。</p>
+    <p id="pin-empty">ピン留めはありません。</p>
+"""
+        pin_status = """
     <p id="page-pin-status" class="pin-status" role="status" aria-live="polite" hidden></p>"""
     document = f"""<!DOCTYPE html>
 <html lang="ja">
@@ -671,8 +673,8 @@ def build_menu(
 </head>
 <body class="menu-page">
   <nav class="menu">
-    <h2>{title}</h2>
-{menu_body}{pin_list}{warning_html}
+{pin_list}    <h2>{title}</h2>
+{menu_body}{pin_status}{warning_html}
   </nav>
 {pin_scripts(pin_data, pin_js_url)}</body>
 </html>

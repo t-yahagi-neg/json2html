@@ -163,18 +163,23 @@ class PinTests(unittest.TestCase):
             self.relative_url(PROJECT / "js/page-pins.js", directory), pins[0]
         )
 
-    def test_status_is_initially_empty_and_hidden_for_page_and_hub_menu(self):
+    def test_status_is_initially_empty_and_hidden_for_all_pages_and_menus(self):
         root = self.page("")
         hub = self.page("pins")
+        child = self.page("child/deep")
         self.enable()
         self.assert_success(self.generate())
         for directory, name, tag in (
             (root, "index.html", "span"),
             (hub, "index.html", "span"),
+            (child, "index.html", "span"),
+            (root, "menu.html", "p"),
             (hub, "menu.html", "p"),
+            (child, "menu.html", "p"),
         ):
             with self.subTest(directory=directory, name=name):
                 source = self.read(directory, name)
+                self.assertEqual(1, source.count('id="page-pin-status"'))
                 statuses = [
                     attrs
                     for attrs in Tags(source).attributes(tag)
@@ -183,8 +188,86 @@ class PinTests(unittest.TestCase):
                 self.assertEqual(1, len(statuses))
                 self.assertIn("hidden", statuses[0])
                 self.assertEqual("status", statuses[0]["role"])
+                self.assertEqual("polite", statuses[0]["aria-live"])
+                self.assertEqual("pin-status", statuses[0]["class"])
                 self.assertRegex(
                     source, rf'<{tag}\b[^>]*id="page-pin-status"[^>]*></{tag}>'
+                )
+
+    def test_all_pin_menus_put_short_pin_section_before_existing_menu(self):
+        for hub_path in ("pins", "missing/pins", "."):
+            with self.subTest(hub_path=hub_path):
+                for path in ("", hub_path, "other", "other/deep"):
+                    self.page(path)
+                self.enable(hub_path)
+                results = self.generate()
+                self.assert_success(results)
+                for directory in results:
+                    with self.subTest(directory=directory):
+                        source = self.read(directory, "menu.html")
+                        tags = Tags(source).tags
+                        nav = tags.index(("nav", {"class": "menu"}))
+                        self.assertEqual(
+                            [
+                                ("h2", {}),
+                                ("ul", {"id": "pin-list", "class": "menu-list"}),
+                                ("p", {"id": "pin-empty"}),
+                                ("h2", {}),
+                            ],
+                            tags[nav + 1 : nav + 5],
+                        )
+                        normal_tag, normal_attrs = tags[nav + 5]
+                        if self.link_targets(directory):
+                            self.assertEqual("ul", normal_tag)
+                            self.assertEqual({"class": "menu-list"}, normal_attrs)
+                        else:
+                            self.assertEqual("p", normal_tag)
+                            self.assertEqual({"class": "menu-empty"}, normal_attrs)
+                        self.assertEqual(
+                            ["ピン留め", batch.generate.MENU_TITLE],
+                            re.findall(r"<h2>(.*?)</h2>", source),
+                        )
+                        self.assertIn(
+                            '<p id="pin-empty">ピン留めはありません。</p>', source
+                        )
+                        self.assertNotIn("ピン留めしたページ", source)
+                        for element_id in ("pin-list", "pin-empty", "page-pin-status"):
+                            self.assertEqual(1, source.count(f'id="{element_id}"'))
+                        status_index = next(
+                            i
+                            for i, (_, attrs) in enumerate(tags)
+                            if attrs.get("id") == "page-pin-status"
+                        )
+                        self.assertGreater(status_index, nav + 5)
+
+    def test_unpinned_menu_keeps_exact_document_and_custom_title(self):
+        for items, body in (
+            ([], '    <p class="menu-empty">メニュー項目はありません。</p>'),
+            (
+                [{"type": "text", "text": "通常項目"}],
+                '    <ul class="menu-list">\n'
+                '      <li class="menu-item menu-item-text">\n'
+                "        <span>通常項目</span>\n"
+                "      </li>\n"
+                "    </ul>",
+            ),
+        ):
+            with self.subTest(items=items):
+                source, warnings = batch.generate.build_menu(
+                    {"items": items}, menu_title="通常 & メニュー"
+                )
+                self.assertEqual([], warnings)
+                self.assertEqual(
+                    '<!DOCTYPE html>\n<html lang="ja">\n<head>\n'
+                    '  <meta charset="UTF-8">\n'
+                    '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+                    "  <title>通常 &amp; メニュー</title>\n"
+                    '  <link rel="stylesheet" href="./css/style.css">\n'
+                    '</head>\n<body class="menu-page">\n'
+                    '  <nav class="menu">\n'
+                    "    <h2>通常 &amp; メニュー</h2>\n"
+                    f"{body}\n  </nav>\n</body>\n</html>\n",
+                    source,
                 )
 
     def test_hub_and_normal_pages_have_pin_controls_and_registered_current_ids(self):
@@ -236,6 +319,11 @@ class PinTests(unittest.TestCase):
                         self.assertNotIn("json2html-pins", self.read(directory, name))
                         self.assertNotIn("page-pins.js", self.read(directory, name))
                         self.assertNotIn("page-pin-toggle", self.read(directory, name))
+                        self.assertNotIn('id="pin-list"', self.read(directory, name))
+                        self.assertNotIn('id="pin-empty"', self.read(directory, name))
+                        self.assertNotIn(
+                            'id="page-pin-status"', self.read(directory, name)
+                        )
                 self.assertEqual([], list(self.root.rglob("pin-state.html")))
 
     def test_child_config_enables_pins_but_table_pin_page_is_ignored(self):

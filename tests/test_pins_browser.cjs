@@ -157,6 +157,51 @@ function fixtureFor(t) {
   return { root, writePage, generate, launch, url, visit, setPinned, pinLinks, assertPins, assertParentOnly, metadata, errors };
 }
 
+test('file:// pins: normal menus show shared pins above unchanged regular navigation', { timeout: 90000 }, async t => {
+  const f = fixtureFor(t);
+  f.generate();
+  const context = await f.launch();
+  const page = context.pages()[0];
+  const other = await context.newPage();
+  await f.visit(page, 'branch');
+  const menu = page.frameLocator('#menu-frame');
+  await eventually(() => menu.locator('nav.menu > h2').allTextContents(), ['ピン留め', 'メニュー']);
+  const regular = menu.locator('.menu-list:not(#pin-list) a');
+  const original = await regular.evaluateAll(nodes => nodes.map(node => node.href));
+  await f.assertPins(page, []);
+  await f.visit(other, deep);
+  await f.setPinned(other, true);
+  await f.assertPins(page, [deep]);
+  await f.visit(other, '');
+  await f.setPinned(other, true);
+  await f.assertPins(page, [deep, '']);
+  assert.deepEqual(await regular.evaluateAll(nodes => nodes.map(node => node.href)), original);
+  const layout = await menu.locator('nav.menu').evaluate(nav => {
+    const headings = [...nav.querySelectorAll(':scope > h2')];
+    const pins = nav.querySelector('#pin-list');
+    return { first: nav.firstElementChild.textContent, pinsBeforeMenu:
+      !!(pins.compareDocumentPosition(headings[1]) & Node.DOCUMENT_POSITION_FOLLOWING) };
+  });
+  assert.deepEqual(layout, { first: 'ピン留め', pinsBeforeMenu: true });
+  await page.reload();
+  await f.assertPins(page, [deep, '']);
+  await f.visit(page, deep);
+  await f.assertPins(page, [deep, '']);
+  await f.setPinned(page, false);
+  await f.assertPins(page, ['']);
+  await f.assertPins(other, ['']);
+  await f.setPinned(other, false);
+  await f.assertPins(page, []);
+  await f.visit(page, 'branch');
+  await f.assertPins(page, []);
+  assert.deepEqual(await regular.evaluateAll(nodes => nodes.map(node => node.href)), original);
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.deepEqual(await menu.locator('nav.menu > h2').allTextContents(), ['ピン留め', 'メニュー']);
+  const fits = await menu.locator('body').evaluate(body => body.scrollWidth <= innerWidth);
+  assert.equal(fits, true);
+  assert.deepEqual(f.errors, []);
+});
+
 test('file:// pins: quiet loading/saving/refresh and acknowledged blue toggle, including hover', { timeout: 90000 }, async t => {
   const f = fixtureFor(t);
   f.generate();
@@ -499,7 +544,8 @@ test('file:// pins: hub toolbar toggles its own persistent pin without self-link
   await page.reload();
   await eventually(() => page.locator('#page-pin-toggle').getAttribute('aria-pressed'), 'true');
   await f.visit(page, 'branch');
-  const hrefs = await page.frameLocator('#menu-frame').locator('a').evaluateAll(nodes => nodes.map(node => node.href));
+  await f.assertPins(page, ['pins']);
+  const hrefs = await page.frameLocator('#menu-frame').locator('.menu-list:not(#pin-list) a').evaluateAll(nodes => nodes.map(node => node.href));
   assert.equal(hrefs.filter(href => href === f.url('pins')).length, 1);
   await f.visit(page, 'pins');
   await f.setPinned(page, false);
