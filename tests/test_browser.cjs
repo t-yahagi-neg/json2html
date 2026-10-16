@@ -304,6 +304,37 @@ test('generated HTML works directly from disk', async (t) => {
       await context.unroute(targetUrl);
     });
 
+    await t.test('file URLs open local HTML in new tabs from normal and multiline cells', async () => {
+      const target = writePage('local file 日本語 # %');
+      const targetUrl = url(target);
+      const link = {type: 'link', text: 'HTMLを開く', url: targetUrl};
+      const multiline = {type: 'multiline', lines: ['説明', '', link]};
+      await reset({column_options: {}, rows: [
+        {A: link, B: multiline, C: multiline}, {A: multiline, B: link, C: link},
+      ]});
+      assert.equal(await page.locator('.data-messages').count(), 0);
+      for (let index = 0; index < 6; index++) {
+        const anchor = page.locator('tbody td').nth(index).getByRole('link', {name: 'HTMLを開く'});
+        assert.equal(await anchor.getAttribute('href'), targetUrl);
+        assert.equal(await anchor.getAttribute('target'), '_blank');
+        assert.equal(await anchor.getAttribute('rel'), 'noopener noreferrer');
+        const popupPromise = page.waitForEvent('popup');
+        await anchor.click();
+        const popup = await popupPromise;
+        await popup.waitForURL(targetUrl);
+        await popup.waitForLoadState('domcontentloaded');
+        assert.equal(await popup.title(), 'local file 日本語 # %');
+        assert.equal(await popup.evaluate(() => window.opener), null);
+        await popup.close();
+        assert.equal(page.url(), url());
+      }
+      generate();
+      await page.reload();
+      assert.equal(await page.locator('tbody a').count(), 6);
+      assert.deepEqual(await page.locator('tbody a').evaluateAll(nodes => nodes.map(node => node.href)),
+        Array(6).fill(targetUrl));
+    });
+
     await t.test('breadcrumb links lead to ancestor pages', async () => {
       await page.goto(url(path.join(root, '001')));
       const links = page.locator('.breadcrumbs a');

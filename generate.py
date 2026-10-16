@@ -110,7 +110,7 @@ def validate_menu_structure(data: Any) -> list[Any]:
 
 
 def table_url_is_supported(url: str) -> bool:
-    return url.startswith(("http://", "https://"))
+    return url.startswith(("http://", "https://", "file:///"))
 
 
 def menu_url_is_supported(url: str) -> bool:

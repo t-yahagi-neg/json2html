@@ -189,7 +189,19 @@ python3 json2html/generate.py
 }
 ```
 
-表リンクは`http://`と`https://`だけに対応し、`target="_blank"`と`rel="noopener noreferrer"`を付けます。表示文字列・URLの不足や未対応URLは、使用可能な`text`を通常文字列として表示して警告します。
+表リンクは`http://`・`https://`・`file:///`に対応し、`target="_blank"`と`rel="noopener noreferrer"`を付けて新規タブで開きます。表示文字列・URLの不足や未対応URLは、使用可能な`text`を通常文字列として表示して警告します。
+
+ローカルHTMLの例です。通常のリンクセルと、すべての列の`multiline.lines`内で同じ形式を使えます。
+
+```json
+{
+  "type": "link",
+  "text": "ローカルのレポート",
+  "url": "file:///Users/shizuku/reports/index.html"
+}
+```
+
+`file:///`は絶対パスで指定してください。パスに`#`や`%`などを含む場合は、それぞれ`%23`・`%25`のようにURLエンコードします。`file://server/`などのホスト付きURLや、表リンクの相対パスは対象外です。リンク先の存在は生成時に確認しません。ChromeでローカルHTMLからローカルHTMLへの遷移を検証していますが、HTTP/HTTPSで配信したページからローカルファイルを開く操作はブラウザーのセキュリティ設定により拒否される場合があります。保護機能を無効化する処理は追加しません。
 
 ### 黒塗りセル
 

@@ -157,6 +157,101 @@ class GenerateTests(unittest.TestCase):
         self.assertIn("menu.json読み込み時の警告", menu)
         self.assertNotIn('href="ftp://', menu)
 
+    def test_local_file_links_in_every_column_and_cell_type(self) -> None:
+        columns = ["first", "middle", "last"]
+        text = '<日本語 & "link"\'>'
+        escaped_text = "&lt;日本語 &amp; &quot;link&quot;&#x27;&gt;"
+        for url, escaped_url in (
+            ("file:///Users/test/index.html", "file:///Users/test/index.html"),
+            (
+                "file:///Users/test/日本語 空白.html",
+                "file:///Users/test/日本語 空白.html",
+            ),
+            (
+                "file:///Users/test/%E6%97%A5%E6%9C%AC%20%E8%AA%9E.html#section?x=1",
+                "file:///Users/test/%E6%97%A5%E6%9C%AC%20%E8%AA%9E.html#section?x=1",
+            ),
+            (
+                "file:///Users/test/a & b.html?x=\"<値>\"&y='ok'#見出し",
+                "file:///Users/test/a &amp; b.html?x=&quot;&lt;値&gt;&quot;"
+                "&amp;y=&#x27;ok&#x27;#見出し",
+            ),
+            ("file:///Users/test/no-extension", "file:///Users/test/no-extension"),
+            ("file:///Users/test/data.txt", "file:///Users/test/data.txt"),
+        ):
+            for cell_type in ("link", "multiline"):
+                with self.subTest(url=url, cell_type=cell_type):
+                    link = {"type": "link", "text": text, "url": url}
+                    cell = (
+                        link
+                        if cell_type == "link"
+                        else {"type": "multiline", "lines": [link]}
+                    )
+                    document, warnings = generate.build_index(
+                        {"columns": columns, "rows": [dict.fromkeys(columns, cell)]}
+                    )
+                    self.assertEqual([], warnings)
+                    cells = re.findall(r"<td\b.*?</td>", document, re.DOTALL)
+                    self.assertEqual(3, len(cells))
+                    self.assertEqual([cells[0]] * 3, cells)
+                    anchor = (
+                        f'<a href="{escaped_url}" target="_blank" '
+                        f'rel="noopener noreferrer">{escaped_text}</a>'
+                    )
+                    for rendered in cells:
+                        self.assertEqual(1, rendered.count(anchor))
+                        self.assertIn(f'data-filter-value="{escaped_text}"', rendered)
+                        self.assertIn(f'data-filter-label="{escaped_text}"', rendered)
+                        if cell_type == "multiline":
+                            self.assertIn(
+                                '<div class="multiline-line multiline-link-line">'
+                                f"{anchor}</div>",
+                                rendered,
+                            )
+
+    def test_standalone_invalid_urls_fall_back_in_every_column(self) -> None:
+        columns = ["first", "middle", "last"]
+        for url in (
+            "file://host/path/index.html",
+            "file:/Users/test/index.html",
+            "javascript:alert(1)",
+            "data:text/html,<b>unsafe</b>",
+            "ftp://example.com/",
+            "./relative.html",
+        ):
+            with self.subTest(url=url):
+                cell = {"type": "link", "text": "<unsafe>&", "url": url}
+                document, warnings = generate.build_index(
+                    {"columns": columns, "rows": [dict.fromkeys(columns, cell)]}
+                )
+                self.assertEqual(3, len(warnings))
+                cells = re.findall(r"<td\b.*?</td>", document, re.DOTALL)
+                self.assertEqual(3, len(cells))
+                for column, rendered, warning in zip(columns, cells, warnings):
+                    self.assertIn(f"{column}列", warning)
+                    self.assertIn("未対応の形式", warning)
+                    self.assertNotIn("<a ", rendered)
+                    self.assertIn('data-filter-value="&lt;unsafe&gt;&amp;"', rendered)
+                    self.assertIn("&lt;unsafe&gt;&amp;</td>", rendered)
+
+    def test_menu_still_rejects_file_and_other_unsupported_schemes(self) -> None:
+        for url in (
+            "file:///Users/test/index.html",
+            "file://host/path/index.html",
+            "file:/Users/test/index.html",
+            "javascript:alert(1)",
+            "data:text/html,<b>unsafe</b>",
+            "ftp://example.com/",
+        ):
+            with self.subTest(url=url):
+                menu, warnings = generate.build_menu(
+                    {"items": [{"type": "link", "text": "<unsafe>&", "url": url}]}
+                )
+                self.assertEqual(1, len(warnings))
+                self.assertIn("未対応の形式", warnings[0])
+                self.assertNotIn("<a ", menu)
+                self.assertIn("&lt;unsafe&gt;&amp;", menu)
+
     def test_multiline_links_are_identical_in_every_column(self) -> None:
         columns = ["first", "middle", "last"]
         cell = {
@@ -229,7 +324,10 @@ class GenerateTests(unittest.TestCase):
     def test_multiline_invalid_urls_fall_back_in_every_column(self) -> None:
         for column in ("first", "middle", "last"):
             for url, warning in (
+                ("file://host/path/index.html", "未対応の形式"),
+                ("file:/Users/test/index.html", "未対応の形式"),
                 ("javascript:alert(1)", "未対応の形式"),
+                ("data:text/html,<b>unsafe</b>", "未対応の形式"),
                 ("ftp://example.com/", "未対応の形式"),
                 ("./relative.html", "未対応の形式"),
                 ("", "URLが空"),
